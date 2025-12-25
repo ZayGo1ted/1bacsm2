@@ -1,0 +1,5 @@
+{
+  "name": "ClassHub: Classroom Management System",
+  "description": "A private, role-based educational dashboard for managing exams, homework, and classroom resources with distinct views for Dev, Admin, and Students.",
+  "requestFramePermissions": []
+}

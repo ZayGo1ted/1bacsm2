@@ -1,0 +1,212 @@
+
+import React from 'react';
+import { BookOpen, Calculator, Atom, Globe, Book, GraduationCap, Heart, Languages, Brain, Activity } from 'lucide-react';
+import { UserRole, Subject, User, AcademicItem, Language } from './types';
+
+export const APP_NAME = "1Bacsm 2";
+
+export const INITIAL_SUBJECTS: Subject[] = [
+  { 
+    id: 'math', 
+    name: { en: 'Mathematics SM', fr: 'Mathématiques SM', ar: 'الرياضيات م.ر' }, 
+    description: { en: 'Logic, Sets, Functions', fr: 'Logique, Ensembles, Fonctions', ar: 'المنطق، المجموعات، الدوال' }, 
+    color: 'bg-blue-600' 
+  },
+  { 
+    id: 'physics', 
+    name: { en: 'Physics & Chemistry', fr: 'Physique-Chimie', ar: 'الفيزياء والكيمياء' }, 
+    description: { en: 'Mechanics & Redox', fr: 'Mécanique & Redox', ar: 'الميكانيكا والكيمياء' }, 
+    color: 'bg-purple-600' 
+  },
+  { 
+    id: 'svt', 
+    name: { en: 'SVT', fr: 'SVT', ar: 'علوم الحياة والأرض' }, 
+    description: { en: 'Geology & Biology', fr: 'Géologie & Biologie', ar: 'الجيولوجيا والبيولوجيا' }, 
+    color: 'bg-green-600' 
+  },
+  { 
+    id: 'ar', 
+    name: { en: 'Arabic', fr: 'Arabe', ar: 'اللغة العربية' }, 
+    description: { en: 'Literature', fr: 'Littérature', ar: 'الأدب العربي' }, 
+    color: 'bg-emerald-600' 
+  },
+  { 
+    id: 'fr', 
+    name: { en: 'French', fr: 'Français', ar: 'اللغة الفرنسية' }, 
+    description: { en: 'The Antigone, Le Dernier Jour', fr: 'Antigone, Le Dernier Jour', ar: 'الأدب الفرنسي' }, 
+    color: 'bg-red-600' 
+  },
+  { 
+    id: 'islamic', 
+    name: { en: 'Islamic Education', fr: 'Éducation Islamique', ar: 'التربية الإسلامية' }, 
+    description: { en: 'Faith and Values', fr: 'Foi et Valeurs', ar: 'العقيدة والقيم' }, 
+    color: 'bg-teal-600' 
+  },
+  { 
+    id: 'phil', 
+    name: { en: 'Philosophy', fr: 'Philosophie', ar: 'الفلسفة' }, 
+    description: { en: 'Reason and Truth', fr: 'Raison et Vérité', ar: 'المجزوءات الفلسفية' }, 
+    color: 'bg-amber-600' 
+  },
+  { 
+    id: 'english', 
+    name: { en: 'English', fr: 'Anglais', ar: 'اللغة الإنجليزية' }, 
+    description: { en: 'Grammar and Vocab', fr: 'Grammaire et Vocabulaire', ar: 'اللغة الإنجليزية' }, 
+    color: 'bg-indigo-600' 
+  },
+  { 
+    id: 'eps', 
+    name: { en: 'Sports', fr: 'E.P.S', ar: 'التربية البدنية' }, 
+    description: { en: 'Physical Activity', fr: 'Activité Physique', ar: 'الرياضة' }, 
+    color: 'bg-orange-600' 
+  }
+];
+
+export const MOCK_ITEMS: AcademicItem[] = [];
+
+export const SUBJECT_ICONS: Record<string, React.ReactNode> = {
+  math: <Calculator className="w-6 h-6" />,
+  physics: <Atom className="w-6 h-6" />,
+  svt: <Globe className="w-6 h-6" />,
+  ar: <Book className="w-6 h-6" />,
+  fr: <BookOpen className="w-6 h-6" />,
+  islamic: <Heart className="w-6 h-6" />,
+  english: <Languages className="w-6 h-6" />,
+  phil: <Brain className="w-6 h-6" />,
+  eps: <Activity className="w-6 h-6" />,
+};
+
+export const TRANSLATIONS: Record<Language, any> = {
+  en: {
+    welcome: "Welcome",
+    overview: "Home",
+    calendar: "Exams & Events",
+    subjects: "Curriculum",
+    classlist: "Students",
+    timetable: "Class Schedule",
+    management: "Control Center",
+    dev: "Dev Tools",
+    logout: "Exit",
+    login: "Login",
+    register: "Join",
+    email: "Email",
+    password: "Password",
+    name: "Full Name",
+    secret: "Dev Key",
+    studentId: "Student ID",
+    exam: "Exam",
+    homework: "Homework",
+    event: "Event",
+    due: "Deadline",
+    add: "Create",
+    save: "Save",
+    delete: "Delete",
+    edit: "Modify",
+    cancel: "Cancel",
+    notes: "Notes",
+    resources: "Materials",
+    today: "Today",
+    no_items: "No tasks",
+    time: "Time",
+    room: "Room",
+    location: "Location",
+    monday: "Monday",
+    tuesday: "Tuesday",
+    wednesday: "Wednesday",
+    thursday: "Thursday",
+    friday: "Friday",
+    saturday: "Saturday",
+    placeholder_title: "Enter title...",
+    placeholder_notes: "Add description...",
+    upload_res: "Attach Resources",
+    time_info: "Schedule Info"
+  },
+  fr: {
+    welcome: "Bienvenue",
+    overview: "Accueil",
+    calendar: "Calendrier",
+    subjects: "Matières",
+    classlist: "Étudiants",
+    timetable: "Emploi du Temps",
+    management: "Gestion",
+    dev: "Console Dev",
+    logout: "Sortie",
+    login: "Connexion",
+    register: "Inscription",
+    email: "Email",
+    password: "Mot de passe",
+    name: "Nom Complet",
+    secret: "Clé Dev",
+    studentId: "ID Étudiant",
+    exam: "Examen",
+    homework: "Devoir",
+    event: "Événement",
+    due: "Échéance",
+    add: "Ajouter",
+    save: "Enregistrer",
+    delete: "Supprimer",
+    edit: "Modifier",
+    cancel: "Annuler",
+    notes: "Notes",
+    resources: "Ressources",
+    today: "Aujourd'hui",
+    no_items: "Aucune tâche",
+    time: "Heure",
+    room: "Salle",
+    location: "Lieu",
+    monday: "Lundi",
+    tuesday: "Mardi",
+    wednesday: "Mercredi",
+    thursday: "Jeudi",
+    friday: "Vendredi",
+    saturday: "Samedi",
+    placeholder_title: "Titre...",
+    placeholder_notes: "Description...",
+    upload_res: "Ajouter Ressources",
+    time_info: "Horaire"
+  },
+  ar: {
+    welcome: "مرحباً",
+    overview: "الرئيسية",
+    calendar: "الامتحانات",
+    subjects: "المواد",
+    classlist: "الطلاب",
+    timetable: "استعمال الزمن",
+    management: "التسيير",
+    dev: "المطور",
+    logout: "خروج",
+    login: "دخول",
+    register: "انضمام",
+    email: "البريد",
+    password: "كلمة السر",
+    name: "الاسم الكامل",
+    secret: "رمز المطور",
+    studentId: "رقم الطالب",
+    exam: "امتحان",
+    homework: "واجب",
+    event: "حدث",
+    due: "الموعد",
+    add: "إضافة",
+    save: "حفظ",
+    delete: "حذف",
+    edit: "تعديل",
+    cancel: "إلغاء",
+    notes: "ملاحظات",
+    resources: "موارد",
+    today: "اليوم",
+    no_items: "لا يوجد مهام",
+    time: "الوقت",
+    room: "القاعة",
+    location: "المكان",
+    monday: "الاثنين",
+    tuesday: "الثلاثاء",
+    wednesday: "الأربعاء",
+    thursday: "الخميس",
+    friday: "الجمعة",
+    saturday: "السبت",
+    placeholder_title: "العنوان...",
+    placeholder_notes: "ملاحظات إضافية...",
+    upload_res: "إرفاق موارد",
+    time_info: "معلومات الوقت"
+  }
+};
