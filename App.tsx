@@ -12,6 +12,7 @@ import ClassList from './components/ClassList';
 import AdminPanel from './components/AdminPanel';
 import DevTools from './components/DevTools';
 import Timetable from './components/Timetable';
+import { AlertTriangle, CloudOff } from 'lucide-react';
 
 interface AuthContextType {
   user: User | null;
@@ -44,25 +45,34 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
+  const [configError, setConfigError] = useState<string | null>(null);
 
-  // Initial Sync from Supabase
+  const syncFromCloud = async () => {
+    if (!supabaseService.isConfigured()) {
+      setConfigError("SUPABASE_ANON_KEY is not set in environment variables.");
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      const cloudData = await supabaseService.fetchFullState();
+      setAppState(prev => ({
+        ...prev,
+        users: cloudData.users,
+        items: cloudData.items,
+        timetable: cloudData.timetable
+      }));
+      setConfigError(null);
+    } catch (e: any) {
+      console.error("Cloud sync failed:", e);
+      setConfigError(e.message || "Failed to connect to database.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const sync = async () => {
-      try {
-        const cloudData = await supabaseService.fetchFullState();
-        setAppState(prev => ({
-          ...prev,
-          users: cloudData.users,
-          items: cloudData.items,
-          timetable: cloudData.timetable
-        }));
-      } catch (e) {
-        console.error("Cloud sync failed, falling back to cached logic", e);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    sync();
+    syncFromCloud();
   }, []);
 
   useEffect(() => {
@@ -73,10 +83,14 @@ const App: React.FC = () => {
   const t = (key: string) => TRANSLATIONS[appState.language][key] || key;
 
   const login = async (email: string) => {
-    const { data, error } = await supabaseService.getUserByEmail(email);
-    if (data && !error) {
-      setCurrentUser(data);
-      return true;
+    try {
+      const { data, error } = await supabaseService.getUserByEmail(email);
+      if (data && !error) {
+        setCurrentUser(data);
+        return true;
+      }
+    } catch (e) {
+      console.error("Login failed:", e);
     }
     return false;
   };
@@ -92,12 +106,20 @@ const App: React.FC = () => {
       studentNumber: `STU-${Math.floor(Math.random() * 1000).toString().padStart(3, '0')}`
     };
 
-    const { error } = await supabaseService.registerUser(newUser);
-    if (error) return false;
+    try {
+      const { error } = await supabaseService.registerUser(newUser);
+      if (error) {
+        console.error("Registration error:", error);
+        return false;
+      }
 
-    setAppState(prev => ({ ...prev, users: [...prev.users, newUser] }));
-    setCurrentUser(newUser);
-    return true;
+      setAppState(prev => ({ ...prev, users: [...prev.users, newUser] }));
+      setCurrentUser(newUser);
+      return true;
+    } catch (e) {
+      console.error("Registration failed:", e);
+      return false;
+    }
   };
 
   const logout = () => {
@@ -112,11 +134,15 @@ const App: React.FC = () => {
     setAppState(prev => ({ ...prev, language: l }));
   };
 
-  const updateAppState = (updates: Partial<AppState>) => {
+  const updateAppState = async (updates: Partial<AppState>) => {
     setAppState(prev => ({ ...prev, ...updates }));
-    // If updating timetable, sync it specifically
+    
     if (updates.timetable) {
-      supabaseService.updateTimetable(updates.timetable);
+      try {
+        await supabaseService.updateTimetable(updates.timetable);
+      } catch (e) {
+        console.error("Failed to sync timetable:", e);
+      }
     }
   };
 
@@ -132,12 +158,41 @@ const App: React.FC = () => {
     setLang 
   };
 
+  if (configError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div className="max-w-md w-full bg-white p-10 rounded-[2.5rem] shadow-2xl border border-rose-100 text-center space-y-6">
+          <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mx-auto mb-4">
+            <CloudOff size={40} />
+          </div>
+          <h1 className="text-2xl font-black text-slate-900">Database Configuration Error</h1>
+          <p className="text-slate-500 font-bold text-sm leading-relaxed">
+            The application is unable to connect to Supabase because the <code className="bg-slate-100 px-2 py-1 rounded text-rose-600">SUPABASE_ANON_KEY</code> is missing or invalid.
+          </p>
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-left">
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Technical Detail:</p>
+            <p className="text-xs font-mono text-slate-600 break-words">{configError}</p>
+          </div>
+          <button 
+            onClick={() => window.location.reload()}
+            className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black hover:bg-indigo-700 transition-all shadow-lg"
+          >
+            Retry Connection
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-4">
-          <div className="w-12 h-12 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-black text-slate-400 text-xs uppercase tracking-widest">Connecting to Cloud...</p>
+        <div className="flex flex-col items-center gap-6">
+          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
+          <div className="text-center">
+            <p className="font-black text-slate-900 text-lg">Initializing Secure Cloud</p>
+            <p className="font-bold text-slate-400 text-xs uppercase tracking-widest mt-1">Authenticating with Supabase...</p>
+          </div>
         </div>
       </div>
     );
