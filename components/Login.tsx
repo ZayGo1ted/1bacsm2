@@ -23,18 +23,25 @@ const Login: React.FC = () => {
   const [error, setError] = useState('');
   const { login, register, t, lang, setLang } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
-    if (isRegistering) {
-      if (!register(name, email, secret)) {
-        setError('Registration failed. Email might already exist.');
+    try {
+      if (isRegistering) {
+        const success = await register(name, email, secret);
+        if (!success) {
+          setError('Registration failed. Email might already exist.');
+        }
+      } else {
+        const success = await login(email);
+        if (!success) {
+          setError('Login failed. User not found. Did you register?');
+        }
       }
-    } else {
-      if (!login(email)) {
-        setError('Login failed. Email not found. Try registering?');
-      }
+    } catch (err) {
+      setError('Connection error. Please try again.');
+      console.error(err);
     }
   };
 
@@ -42,7 +49,6 @@ const Login: React.FC = () => {
 
   return (
     <div className={`min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 ${isRtl ? 'font-[Tajawal]' : ''}`}>
-      {/* Moved higher for mobile visibility */}
       <div className="fixed top-2 md:top-8 right-2 md:right-8 flex gap-1 bg-white p-1 rounded-xl shadow-2xl border border-slate-100 z-50">
         {['en', 'fr', 'ar'].map((l) => (
           <button
