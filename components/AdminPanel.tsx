@@ -406,3 +406,4 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
 };
 
 export default AdminPanel;
+ 
