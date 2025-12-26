@@ -23,10 +23,12 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
     if (!isDev) return;
     try {
       const updatedUser = { ...targetUser, role: newRole };
+      // 1. Database Update
       await supabaseService.updateUser(updatedUser);
+      // 2. Local State Update (App.tsx will handle syncing currentUser if needed)
       onUpdate({ users: users.map(u => u.id === targetUser.id ? updatedUser : u) });
     } catch (err) {
-      alert("Role update failed.");
+      alert("Role update failed. Please check your connection.");
     }
   };
 
@@ -106,7 +108,9 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
 
               {/* Avatar Section */}
               <div className="relative mb-2 mt-2">
-                <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xl border-2 border-white shadow-inner group-hover:scale-105 transition-transform duration-500">
+                <div className={`w-14 h-14 md:w-16 md:h-16 rounded-2xl flex items-center justify-center font-black text-xl border-2 border-white shadow-inner group-hover:scale-105 transition-transform duration-500 ${
+                  member.role === UserRole.DEV ? 'bg-slate-900 text-white' : 'bg-indigo-50 text-indigo-600'
+                }`}>
                   {member.name.charAt(0)}
                 </div>
                 {isOnline && (
@@ -129,7 +133,7 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
                 </p>
 
                 {/* Dev Only Role Modifier */}
-                {isDev && member.id !== currentUser?.id && (
+                {isDev && (
                   <div className="mt-2 pt-2 border-t border-slate-50 w-full">
                     <select 
                       className="bg-slate-50 w-full text-[8px] font-black uppercase py-1 px-1 rounded-md border border-slate-100 cursor-pointer text-slate-500 outline-none hover:border-indigo-300 transition-colors" 
