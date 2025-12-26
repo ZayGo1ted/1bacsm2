@@ -50,6 +50,7 @@ const App: React.FC = () => {
   const [syncWarning, setSyncWarning] = useState<boolean>(false);
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const [isBrowserOffline, setIsBrowserOffline] = useState(!navigator.onLine);
+  const [pendingEditItem, setPendingEditItem] = useState<AcademicItem | null>(null);
 
   const syncFromCloud = async () => {
     if (!supabaseService.isConfigured()) {
@@ -64,7 +65,8 @@ const App: React.FC = () => {
         ...prev,
         users: cloudData.users,
         items: cloudData.items,
-        timetable: cloudData.timetable
+        timetable: cloudData.timetable,
+        subjects: INITIAL_SUBJECTS 
       }));
       setConfigError(null);
     } catch (e: any) {
@@ -91,7 +93,6 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Real-time Presence tracking (Online/Offline)
   useEffect(() => {
     if (!currentUser) return;
     const supabase = getSupabase();
@@ -185,6 +186,11 @@ const App: React.FC = () => {
     }
   };
 
+  const handleCalendarEditRequest = (item: AcademicItem) => {
+    setPendingEditItem(item);
+    setCurrentView('admin');
+  };
+
   const authValue: AuthContextType = { 
     user: currentUser, login, register, logout, isDev, isAdmin, t, lang: appState.language, setLang, onlineUserIds 
   };
@@ -211,7 +217,7 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-6">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-black text-slate-900 text-lg text-center px-4">Initializing Classroom Assets...</p>
+          <p className="font-black text-slate-900 text-lg text-center px-4">Connecting to Hub...</p>
         </div>
       </div>
     );
@@ -239,11 +245,11 @@ const App: React.FC = () => {
             {(() => {
               switch (currentView) {
                 case 'overview': return <Overview items={appState.items} subjects={appState.subjects} />;
-                case 'calendar': return <CalendarView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} />;
+                case 'calendar': return <CalendarView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} onEditRequest={handleCalendarEditRequest} />;
                 case 'timetable': return <Timetable entries={appState.timetable} subjects={appState.subjects} onUpdate={updateAppState} />;
                 case 'subjects': return <SubjectsView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} />;
                 case 'classlist': return <ClassList users={appState.users} onUpdate={updateAppState} />;
-                case 'admin': return isAdmin ? <AdminPanel items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} /> : <Overview items={appState.items} subjects={appState.subjects} />;
+                case 'admin': return isAdmin ? <AdminPanel items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} initialEditItem={pendingEditItem} onEditHandled={() => setPendingEditItem(null)} /> : <Overview items={appState.items} subjects={appState.subjects} />;
                 case 'dev': return isDev ? <DevTools state={appState} onUpdate={updateAppState} /> : <Overview items={appState.items} subjects={appState.subjects} />;
                 default: return <Overview items={appState.items} subjects={appState.subjects} />;
               }
