@@ -7,6 +7,12 @@ export const APP_NAME = "1Bacsm 2";
 
 export const INITIAL_SUBJECTS: Subject[] = [
   { 
+    id: 'history', 
+    name: { en: 'History & Geography', fr: 'Histoire-Géo', ar: 'التاريخ والجغرافيا' }, 
+    description: { en: 'World History & Maps', fr: 'Histoire Mondiale & Cartes', ar: 'التاريخ العالمي والجغرافيا' }, 
+    color: 'bg-yellow-600' 
+  },
+  { 
     id: 'math', 
     name: { en: 'Mathematics SM', fr: 'Mathématiques SM', ar: 'الرياضيات م.ر' }, 
     description: { en: 'Logic, Sets, Functions', fr: 'Logique, Ensembles, Fonctions', ar: 'المنطق، المجموعات، الدوال' }, 
@@ -23,12 +29,6 @@ export const INITIAL_SUBJECTS: Subject[] = [
     name: { en: 'SVT', fr: 'SVT', ar: 'علوم الحياة والأرض' }, 
     description: { en: 'Geology & Biology', fr: 'Géologie & Biologie', ar: 'الجيولوجيا والبيولوجيا' }, 
     color: 'bg-green-600' 
-  },
-  { 
-    id: 'history', 
-    name: { en: 'History & Geography', fr: 'Histoire-Géo', ar: 'التاريخ والجغرافيا' }, 
-    description: { en: 'World History & Maps', fr: 'Histoire Mondiale & Cartes', ar: 'التاريخ العالمي والجغرافيا' }, 
-    color: 'bg-yellow-600' 
   },
   { 
     id: 'ar', 
