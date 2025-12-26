@@ -71,68 +71,75 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      <div className="grid grid-cols-1 gap-8">
         {filtered.map(member => {
           const isOnline = onlineUserIds.has(member.id);
           return (
-            <div key={member.id} className="bg-white p-8 rounded-[3rem] border border-slate-50 shadow-xl flex flex-col md:flex-row items-center justify-between gap-8 group hover:border-indigo-300 transition-all relative">
-              <div className="flex items-center gap-6 w-full">
+            <div key={member.id} className="bg-white p-10 rounded-[3rem] border border-slate-50 shadow-xl flex flex-col md:flex-row items-center justify-between gap-10 group hover:border-indigo-300 transition-all relative overflow-hidden">
+              <div className="flex items-center gap-8 w-full">
                 <div className="relative shrink-0">
-                  <div className="w-24 h-24 rounded-[2rem] bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-4xl border-4 border-white shadow-inner group-hover:scale-110 transition-transform duration-500">
+                  <div className="w-28 h-28 rounded-[2.5rem] bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-5xl border-4 border-white shadow-inner group-hover:scale-110 transition-transform duration-500">
                     {member.name.charAt(0)}
                   </div>
                   {isOnline && (
-                    <div className="absolute -bottom-1 -right-1 bg-white p-1.5 rounded-full shadow-lg">
-                      <div className="w-5 h-5 bg-emerald-500 rounded-full animate-pulse border-2 border-white"></div>
+                    <div className="absolute -bottom-1 -right-1 bg-white p-2 rounded-full shadow-lg">
+                      <div className="w-6 h-6 bg-emerald-500 rounded-full animate-pulse border-2 border-white"></div>
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center flex-wrap gap-2 mb-2">
-                    <h3 className="font-black text-slate-900 text-2xl leading-none truncate">{member.name}</h3>
-                    {member.role === UserRole.DEV && <ShieldAlert size={20} className="text-amber-500" />}
-                    {member.role === UserRole.ADMIN && <ShieldCheck size={20} className="text-indigo-500" />}
+                <div className="flex-1 min-w-0 space-y-3">
+                  <div className="flex items-center flex-wrap gap-3 mb-1">
+                    <h3 className="font-black text-slate-900 text-3xl tracking-tight truncate">{member.name}</h3>
+                    <div className="flex gap-2">
+                      {member.role === UserRole.DEV && <ShieldAlert size={24} className="text-amber-500" />}
+                      {member.role === UserRole.ADMIN && <ShieldCheck size={24} className="text-indigo-500" />}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3">
-                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{member.studentNumber || 'EXTERNAL'}</p>
+                  <div className="flex items-center gap-4">
+                    <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">{member.studentNumber || 'GUEST USER'}</p>
                     {isOnline && (
-                      <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase tracking-widest border border-emerald-100">
-                        <Activity size={10} /> active
+                      <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-widest border border-emerald-100">
+                        <Activity size={12} className="animate-bounce" /> connected
                       </span>
                     )}
                   </div>
-                  <p className="text-sm text-slate-400 lowercase truncate mt-2 font-medium">{member.email}</p>
+                  <p className="text-base text-slate-400 lowercase truncate font-medium">{member.email}</p>
                   
                   {isDev && (
-                    <div className="mt-4 flex items-center gap-3 bg-slate-50 p-2 rounded-2xl w-fit border border-slate-100">
-                      <Settings2 size={14} className="text-slate-400 ml-1" />
-                      <select 
-                        className="bg-transparent text-[10px] font-black uppercase tracking-widest outline-none border-none cursor-pointer text-slate-600"
-                        value={member.role}
-                        onChange={(e) => handleRoleChange(member, e.target.value as UserRole)}
-                      >
-                        {Object.values(UserRole).map(r => <option key={r} value={r}>{r}</option>)}
-                      </select>
+                    <div className="mt-6 flex flex-col gap-2">
+                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Access Level Control</label>
+                      <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl w-full max-w-[280px] border border-slate-100 focus-within:border-indigo-400 transition-all shadow-sm">
+                        <Settings2 size={18} className="text-slate-400 ml-1" />
+                        <select 
+                          className="bg-transparent flex-1 text-xs font-black uppercase tracking-widest outline-none border-none cursor-pointer text-slate-700"
+                          value={member.role}
+                          onChange={(e) => handleRoleChange(member, e.target.value as UserRole)}
+                        >
+                          {Object.values(UserRole).map(r => (
+                            <option key={r} value={r} className="font-bold">{r}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
               
-              <div className="flex flex-row md:flex-col items-center justify-center gap-3 w-full md:w-auto border-t md:border-t-0 md:border-l border-slate-50 pt-6 md:pt-0 md:pl-8">
+              <div className="flex flex-row md:flex-col items-center justify-center gap-4 w-full md:w-auto border-t md:border-t-0 md:border-l border-slate-50 pt-8 md:pt-0 md:pl-10 shrink-0">
                 <a 
                   href={`mailto:${member.email}`} 
-                  className="p-4 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all border border-transparent hover:border-indigo-100 shadow-sm"
-                  title="Send Email"
+                  className="p-5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-[1.75rem] transition-all border border-transparent hover:border-indigo-100 shadow-sm"
+                  title="Direct Message"
                 >
-                  <Mail size={24} />
+                  <Mail size={32} />
                 </a>
                 {isAdmin && member.role !== UserRole.DEV && (
                   <button 
                     onClick={() => handleDelete(member.id)} 
-                    className="p-4 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all border border-transparent hover:border-red-100 shadow-sm"
-                    title="Remove User"
+                    className="p-5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-[1.75rem] transition-all border border-transparent hover:border-red-100 shadow-sm"
+                    title="Terminate Access"
                   >
-                    <Trash2 size={24} />
+                    <Trash2 size={32} />
                   </button>
                 )}
               </div>
