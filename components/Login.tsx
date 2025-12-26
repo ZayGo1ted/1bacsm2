@@ -6,12 +6,11 @@ import {
   Code, 
   UserPlus, 
   GraduationCap, 
-  ShieldCheck, 
   Mail, 
   Lock, 
   User as UserIcon,
   ChevronRight,
-  Globe
+  AlertTriangle
 } from 'lucide-react';
 import { APP_NAME } from '../constants';
 
@@ -26,36 +25,30 @@ const Login: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
-    
     try {
       if (isRegistering) {
         const success = await register(name, email, secret);
-        if (!success) {
-          setError('Registration failed. Email might already exist.');
-        }
+        if (!success) setError('Registration failed.');
       } else {
         const success = await login(email);
-        if (!success) {
-          setError('Login failed. User not found. Did you register?');
-        }
+        if (!success) setError('User not found.');
       }
-    } catch (err) {
-      setError('Connection error. Please try again.');
-      console.error(err);
+    } catch (err: any) {
+      setError(err.message || 'Error occurred');
     }
   };
 
   const isRtl = lang === 'ar';
 
   return (
-    <div className={`min-h-screen flex flex-col items-center justify-center bg-slate-50 p-6 ${isRtl ? 'font-[Tajawal]' : ''}`}>
-      <div className="fixed top-2 md:top-8 right-2 md:right-8 flex gap-1 bg-white p-1 rounded-xl shadow-2xl border border-slate-100 z-50">
+    <div className={`h-screen w-full flex flex-col items-center justify-center bg-slate-50 p-4 overflow-hidden ${isRtl ? 'font-[Tajawal]' : ''}`}>
+      <div className="fixed top-3 right-3 flex gap-1 bg-white/80 backdrop-blur-md p-1 rounded-lg shadow-sm border border-slate-200 z-50 scale-90">
         {['en', 'fr', 'ar'].map((l) => (
           <button
             key={l}
             onClick={() => setLang(l as any)}
-            className={`px-3 md:px-4 py-1.5 md:py-2 rounded-lg text-[9px] md:text-xs font-black transition-all ${
-              lang === l ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-100' : 'bg-transparent text-slate-400 hover:text-slate-600'
+            className={`px-2 py-0.5 rounded-md text-[9px] font-black transition-all ${
+              lang === l ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'
             }`}
           >
             {l.toUpperCase()}
@@ -63,29 +56,29 @@ const Login: React.FC = () => {
         ))}
       </div>
 
-      <div className="w-full max-w-lg bg-white rounded-[3rem] md:rounded-[3.5rem] shadow-[0_40px_100px_-20px_rgba(0,0,0,0.12)] p-8 md:p-14 border border-slate-100 animate-in fade-in zoom-in-95 duration-1000 mt-16 md:mt-0">
-        <div className="text-center mb-8 md:mb-12">
-          <div className="bg-indigo-600 w-16 h-16 md:w-24 md:h-24 rounded-[1.5rem] md:rounded-[2rem] flex items-center justify-center mx-auto mb-4 md:mb-6 shadow-[0_20px_40px_-10px_rgba(79,70,229,0.5)] ring-8 ring-indigo-50 animate-bounce-slow">
-            <GraduationCap className="text-white w-8 h-8 md:w-12 md:h-12" />
+      <div className="w-full max-w-[360px] bg-white rounded-[2rem] shadow-[0_20px_50px_-12px_rgba(0,0,0,0.1)] p-6 md:p-8 border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden relative">
+        <div className="text-center mb-5 shrink-0">
+          <div className="bg-indigo-600 w-12 h-12 rounded-xl flex items-center justify-center mx-auto mb-2 shadow-md ring-4 ring-indigo-50">
+            <GraduationCap className="text-white w-6 h-6" />
           </div>
-          <h1 className="text-3xl md:text-4xl font-black text-slate-900 tracking-tight">{APP_NAME}</h1>
-          <p className="text-slate-400 font-bold mt-2 uppercase tracking-[0.25em] text-[8px] md:text-[10px]">Academic Intelligence Hub</p>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight leading-none">{APP_NAME}</h1>
+          <p className="text-slate-400 font-bold mt-1 uppercase tracking-widest text-[8px]">Academic Dashboard</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 md:space-y-6">
+        <form onSubmit={handleSubmit} className="space-y-2.5 overflow-y-auto hide-scrollbar px-1 flex-1">
           {isRegistering && (
             <div className="space-y-1">
-              <label className="block text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">{t('name')}</label>
+              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">{t('name')}</label>
               <div className="relative">
-                <div className={`absolute inset-y-0 ${isRtl ? 'right-4' : 'left-4'} flex items-center pointer-events-none text-slate-300`}>
-                  <UserIcon size={16} />
+                <div className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'left-3'} flex items-center pointer-events-none text-slate-300`}>
+                  <UserIcon size={14} />
                 </div>
                 <input
                   type="text"
                   value={name}
+                  placeholder="Full Name"
                   onChange={(e) => setName(e.target.value)}
-                  placeholder="Mohamed Amine"
-                  className={`w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 md:py-5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold placeholder:text-slate-300 ${isRtl ? 'pr-12 pl-6' : 'pl-12 pr-6'}`}
+                  className={`w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 focus:border-indigo-500 transition-all outline-none font-bold text-xs ${isRtl ? 'pr-9 pl-4' : 'pl-9 pr-4'}`}
                   required
                 />
               </div>
@@ -93,17 +86,17 @@ const Login: React.FC = () => {
           )}
 
           <div className="space-y-1">
-            <label className="block text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">{t('email')}</label>
+            <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">{t('email')}</label>
             <div className="relative">
-              <div className={`absolute inset-y-0 ${isRtl ? 'right-4' : 'left-4'} flex items-center pointer-events-none text-slate-300`}>
-                <Mail size={16} />
+              <div className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'left-3'} flex items-center pointer-events-none text-slate-300`}>
+                <Mail size={14} />
               </div>
               <input
                 type="email"
                 value={email}
+                placeholder="Email Address"
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="example@1bacsm2.com"
-                className={`w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 md:py-5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold placeholder:text-slate-300 ${isRtl ? 'pr-12 pl-6' : 'pl-12 pr-6'}`}
+                className={`w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 focus:border-indigo-500 transition-all outline-none font-bold text-xs ${isRtl ? 'pr-9 pl-4' : 'pl-9 pr-4'}`}
                 required
               />
             </div>
@@ -111,72 +104,52 @@ const Login: React.FC = () => {
 
           {isRegistering && (
             <div className="space-y-1">
-              <label className="block text-[8px] md:text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">{t('secret')} <span className="text-slate-300">(Optional)</span></label>
+              <label className="text-[8px] font-black text-slate-400 uppercase tracking-widest px-1">{t('secret')}</label>
               <div className="relative">
-                <div className={`absolute inset-y-0 ${isRtl ? 'right-4' : 'left-4'} flex items-center pointer-events-none text-slate-300`}>
-                  <Lock size={16} />
+                <div className={`absolute inset-y-0 ${isRtl ? 'right-3' : 'left-3'} flex items-center pointer-events-none text-slate-300`}>
+                  <Lock size={14} />
                 </div>
                 <input
                   type="password"
                   value={secret}
+                  placeholder="Invite Code (Optional)"
                   onChange={(e) => setSecret(e.target.value)}
-                  placeholder="••••••••"
-                  className={`w-full bg-slate-50 border-2 border-slate-100 rounded-2xl py-4 md:py-5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all outline-none font-bold placeholder:text-slate-300 ${isRtl ? 'pr-12 pl-6' : 'pl-12 pr-6'}`}
+                  className={`w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 focus:border-indigo-500 transition-all outline-none font-bold text-xs ${isRtl ? 'pr-9 pl-4' : 'pl-9 pr-4'}`}
                 />
               </div>
             </div>
           )}
           
           {error && (
-            <div className="flex items-center gap-3 p-3 bg-rose-50 border-2 border-rose-100 rounded-xl animate-shake">
-              <ShieldCheck className="text-rose-500 shrink-0" size={16} />
-              <p className="text-rose-600 text-[10px] font-black">{error}</p>
+            <div className="flex items-start gap-2 p-2 bg-rose-50 border border-rose-100 rounded-lg">
+              <AlertTriangle className="text-rose-500 shrink-0 mt-0.5" size={12} />
+              <p className="text-rose-600 text-[9px] font-black">{error}</p>
             </div>
           )}
           
           <button
             type="submit"
-            className="group w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-4 md:py-6 rounded-2xl md:rounded-[1.75rem] shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 md:gap-3 text-base md:text-lg"
+            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-black py-3 rounded-xl shadow-md transition-all active:scale-[0.98] flex items-center justify-center gap-2 text-sm mt-2"
           >
-            {isRegistering ? <UserPlus size={20}/> : <LogIn size={20} className="rtl-flip"/>}
+            {isRegistering ? <UserPlus size={16}/> : <LogIn size={16} className="rtl-flip"/>}
             <span>{isRegistering ? t('register') : t('login')}</span>
-            <ChevronRight size={18} className={`opacity-50 group-hover:translate-x-1 transition-all ${isRtl ? 'rotate-180 group-hover:-translate-x-1' : ''}`} />
+            <ChevronRight size={14} className={`opacity-40 ${isRtl ? 'rotate-180' : ''}`} />
           </button>
         </form>
 
-        <div className="mt-8 md:mt-10 pt-6 md:pt-8 border-t border-slate-50 text-center">
+        <div className="mt-4 pt-3 border-t border-slate-50 text-center shrink-0">
           <button 
             onClick={() => { setIsRegistering(!isRegistering); setError(''); }}
-            className="text-indigo-600 font-black hover:text-indigo-800 text-xs md:text-sm transition-colors decoration-indigo-200 underline-offset-8 decoration-2 hover:underline"
+            className="text-indigo-600 font-black hover:text-indigo-800 text-[10px] transition-colors"
           >
-            {isRegistering ? "Existing Student? Log In" : "New Student? Enroll Today"}
+            {isRegistering ? "Existing account? Login" : "New member? Enroll"}
           </button>
         </div>
       </div>
       
-      <div className="mt-8 md:mt-12 flex flex-col items-center gap-2 md:gap-4">
-        <div className="flex items-center gap-2 text-slate-400 font-black text-[8px] md:text-[10px] uppercase tracking-[0.4em]">
-          <Code size={14} className="text-indigo-300" /> Secure Classroom v2.1
-        </div>
+      <div className="mt-4 flex items-center gap-2 text-slate-400 font-black text-[8px] uppercase tracking-widest opacity-40">
+        <Code size={10} className="text-indigo-400" /> SECURE HUB V2
       </div>
-
-      <style>{`
-        @keyframes bounce-slow {
-          0%, 100% { transform: translateY(-5%); }
-          50% { transform: translateY(0); }
-        }
-        .animate-bounce-slow {
-          animation: bounce-slow 3s infinite ease-in-out;
-        }
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-4px); }
-          75% { transform: translateX(4px); }
-        }
-        .animate-shake {
-          animation: shake 0.2s ease-in-out 0s 2;
-        }
-      `}</style>
     </div>
   );
 };
