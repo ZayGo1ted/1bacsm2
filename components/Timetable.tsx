@@ -82,7 +82,7 @@ const Timetable: React.FC<Props> = ({ entries, subjects, onUpdate }) => {
             <div className="space-y-1">
               <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-2">Subject</label>
               <select className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-2 font-bold text-sm" value={newEntry.subjectId} onChange={e => setNewEntry({...newEntry, subjectId: e.target.value})}>
-                {subjects.map(s => <option key={s.id} value={s.id}>{s.name['en']}</option>)}
+                {subjects.map(s => <option key={s.id} value={s.id}>{s.name[lang] || s.name['en']}</option>)}
               </select>
             </div>
             <div className="space-y-1">
