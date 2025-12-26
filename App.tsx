@@ -12,6 +12,7 @@ import ClassList from './components/ClassList';
 import AdminPanel from './components/AdminPanel';
 import DevTools from './components/DevTools';
 import Timetable from './components/Timetable';
+import Credits from './components/Credits';
 import { CloudOff, AlertTriangle, WifiOff } from 'lucide-react';
 
 interface AuthContextType {
@@ -277,6 +278,7 @@ const App: React.FC = () => {
                 case 'timetable': return <Timetable entries={appState.timetable} subjects={appState.subjects} onUpdate={updateAppState} />;
                 case 'subjects': return <SubjectsView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} initialSubjectId={selectedSubjectId} clearInitialSubject={() => setSelectedSubjectId(null)} />;
                 case 'classlist': return <ClassList users={appState.users} onUpdate={updateAppState} />;
+                case 'credits': return <Credits />;
                 case 'admin': return isAdmin ? <AdminPanel items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} initialEditItem={pendingEditItem} onEditHandled={() => setPendingEditItem(null)} /> : <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
                 case 'dev': return isDev ? <DevTools state={appState} onUpdate={updateAppState} /> : <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
                 default: return <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
