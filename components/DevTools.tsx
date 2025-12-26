@@ -6,6 +6,7 @@ import {
   RefreshCcw, UserPlus, Trash2, Rocket, Download, 
   FileJson, Settings, Palette, Type 
 } from 'lucide-react';
+import { useAuth } from '../App';
 
 interface Props {
   state: AppState;
@@ -13,6 +14,7 @@ interface Props {
 }
 
 const DevTools: React.FC<Props> = ({ state, onUpdate }) => {
+  const { lang } = useAuth();
   const [jsonInput, setJsonInput] = useState(JSON.stringify(state, null, 2));
   const [error, setError] = useState('');
   const [activeTab, setActiveTab] = useState<'json' | 'subjects' | 'users'>('json');
@@ -54,7 +56,7 @@ const DevTools: React.FC<Props> = ({ state, onUpdate }) => {
           <div>
             <h1 className="text-3xl font-black tracking-tighter uppercase italic flex items-center gap-3">
               Dev Console
-              <span className="bg-indigo-500/20 text-indigo-400 text-[10px] py-1 px-3 rounded-full border border-indigo-500/30 not-italic tracking-widest font-mono">v2.5.4</span>
+              <span className="bg-indigo-500/20 text-indigo-400 text-[10px] py-1 px-3 rounded-full border border-indigo-500/30 not-italic tracking-widest font-mono">v2.5.5</span>
             </h1>
             <p className="text-indigo-300/60 font-mono text-[10px] mt-1 tracking-widest">SYSTEM STATUS: ALL MODULES NOMINAL</p>
           </div>
@@ -137,8 +139,8 @@ const DevTools: React.FC<Props> = ({ state, onUpdate }) => {
                 <div className="flex-1">
                   <input 
                     className="w-full font-black text-slate-900 outline-none border-b border-transparent focus:border-indigo-600"
-                    value={subject.name['en']}
-                    onChange={(e) => updateSubject(subject.id, 'name', { ...subject.name, en: e.target.value })}
+                    value={subject.name[lang] || subject.name['en']}
+                    onChange={(e) => updateSubject(subject.id, 'name', { ...subject.name, [lang]: e.target.value })}
                   />
                   <p className="text-[10px] font-mono text-slate-400">ID: {subject.id}</p>
                 </div>
