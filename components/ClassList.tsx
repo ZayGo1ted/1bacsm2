@@ -11,7 +11,7 @@ interface Props {
 }
 
 const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
-  const { isAdmin, isDev, t, lang, onlineUserIds } = useAuth();
+  const { user: currentUser, isAdmin, isDev, t, lang, onlineUserIds } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   
   const filtered = users.filter(s => 
@@ -19,24 +19,24 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
     s.studentNumber?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const handleRoleChange = async (user: User, newRole: UserRole) => {
+  const handleRoleChange = async (targetUser: User, newRole: UserRole) => {
     if (!isDev) return;
     try {
-      const updatedUser = { ...user, role: newRole };
+      const updatedUser = { ...targetUser, role: newRole };
       await supabaseService.updateUser(updatedUser);
-      onUpdate({ users: users.map(u => u.id === user.id ? updatedUser : u) });
+      onUpdate({ users: users.map(u => u.id === targetUser.id ? updatedUser : u) });
     } catch (err) {
       alert("Role update failed.");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Delete this user?')) {
+    if (confirm('Are you sure you want to permanently delete this user?')) {
       try {
         await supabaseService.deleteUser(id);
         onUpdate({ users: users.filter(u => u.id !== id) });
       } catch (err) {
-        alert("Delete failed.");
+        alert("Delete failed. Please check your connection.");
       }
     }
   };
@@ -71,27 +71,41 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
         />
       </div>
 
-      {/* Grid: 2 columns mobile, 3 tablet, 5 on large screens for maximum density */}
+      {/* Grid: High density layout (2 mobile, 3 tablet, 5 desktop) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
         {filtered.map(member => {
           const isOnline = onlineUserIds.has(member.id);
-          // DEVs can delete anyone. ADMINs can only delete non-DEVs.
-          const canDelete = isDev || (isAdmin && member.role !== UserRole.DEV);
+          
+          // Logic: DEVs can delete anyone but themselves. 
+          // ADMINs can delete non-DEVs but not themselves.
+          const canDelete = (isDev || isAdmin) && 
+                            member.id !== currentUser?.id && 
+                            (isDev || member.role !== UserRole.DEV);
           
           return (
-            <div key={member.id} className="bg-white p-4 rounded-[1.5rem] border border-slate-100 shadow-sm flex flex-col items-center text-center group hover:shadow-lg hover:border-indigo-100 transition-all relative overflow-hidden">
-              <div className="absolute top-2 right-2 flex flex-col gap-1">
+            <div key={member.id} className="bg-white p-4 rounded-[1.5rem] border border-slate-100 shadow-sm flex flex-col items-center text-center group hover:shadow-xl hover:border-indigo-100 transition-all relative overflow-hidden">
+              {/* Action Buttons */}
+              <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
                 {canDelete && (
-                  <button onClick={() => handleDelete(member.id)} className="p-1 text-slate-200 hover:text-rose-500 transition-colors">
-                    <Trash2 size={12} />
+                  <button 
+                    onClick={() => handleDelete(member.id)} 
+                    className="p-1.5 text-rose-300 hover:text-rose-600 bg-rose-50/0 hover:bg-rose-50 rounded-lg transition-all"
+                    title="Delete User"
+                  >
+                    <Trash2 size={14} />
                   </button>
                 )}
-                <a href={`mailto:${member.email}`} className="p-1 text-slate-200 hover:text-indigo-600 transition-colors">
-                  <Mail size={12} />
+                <a 
+                  href={`mailto:${member.email}`} 
+                  className="p-1.5 text-slate-300 hover:text-indigo-600 bg-slate-50/0 hover:bg-indigo-50 rounded-lg transition-all"
+                  title="Contact User"
+                >
+                  <Mail size={14} />
                 </a>
               </div>
 
-              <div className="relative mb-2">
+              {/* Avatar Section */}
+              <div className="relative mb-2 mt-2">
                 <div className="w-14 h-14 md:w-16 md:h-16 rounded-2xl bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-xl border-2 border-white shadow-inner group-hover:scale-105 transition-transform duration-500">
                   {member.name.charAt(0)}
                 </div>
@@ -102,6 +116,7 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
                 )}
               </div>
 
+              {/* User Info Section */}
               <div className="w-full space-y-1">
                 <div className="flex items-center justify-center gap-1 min-w-0">
                   <h3 className="font-black text-slate-900 text-[11px] md:text-xs truncate">{member.name}</h3>
@@ -113,7 +128,8 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
                   {member.studentNumber || 'STU-000'}
                 </p>
 
-                {isDev && (
+                {/* Dev Only Role Modifier */}
+                {isDev && member.id !== currentUser?.id && (
                   <div className="mt-2 pt-2 border-t border-slate-50 w-full">
                     <select 
                       className="bg-slate-50 w-full text-[8px] font-black uppercase py-1 px-1 rounded-md border border-slate-100 cursor-pointer text-slate-500 outline-none hover:border-indigo-300 transition-colors" 
