@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { BookOpen, Calculator, Atom, Globe, Book, GraduationCap, Heart, Languages, Brain, Activity } from 'lucide-react';
+import { BookOpen, Calculator, Atom, Globe, Book, GraduationCap, Heart, Languages, Brain, Activity, Scroll } from 'lucide-react';
 import { UserRole, Subject, User, AcademicItem, Language } from './types';
 
 export const APP_NAME = "1Bacsm 2";
@@ -23,6 +23,12 @@ export const INITIAL_SUBJECTS: Subject[] = [
     name: { en: 'SVT', fr: 'SVT', ar: 'علوم الحياة والأرض' }, 
     description: { en: 'Geology & Biology', fr: 'Géologie & Biologie', ar: 'الجيولوجيا والبيولوجيا' }, 
     color: 'bg-green-600' 
+  },
+  { 
+    id: 'history', 
+    name: { en: 'History & Geography', fr: 'Histoire-Géo', ar: 'التاريخ والجغرافيا' }, 
+    description: { en: 'World History & Maps', fr: 'Histoire Mondiale & Cartes', ar: 'التاريخ العالمي والجغرافيا' }, 
+    color: 'bg-yellow-600' 
   },
   { 
     id: 'ar', 
@@ -68,6 +74,7 @@ export const SUBJECT_ICONS: Record<string, React.ReactNode> = {
   math: <Calculator className="w-6 h-6" />,
   physics: <Atom className="w-6 h-6" />,
   svt: <Globe className="w-6 h-6" />,
+  history: <Scroll className="w-6 h-6" />,
   ar: <Book className="w-6 h-6" />,
   fr: <BookOpen className="w-6 h-6" />,
   islamic: <Heart className="w-6 h-6" />,
