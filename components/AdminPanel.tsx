@@ -173,7 +173,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
             <div className={`p-2 rounded-lg ${editingId ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'}`}>
               {editingId ? <Edit2 size={18}/> : <Plus size={18}/>}
             </div>
-            <h2 className="text-xl font-black text-slate-900">{editingId ? 'Edit Entry' : 'Create New Entry'}</h2>
+            <h2 className="text-xl font-black text-slate-900">{editingId ? 'Modify Existing Task' : 'Create New Task'}</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -183,7 +183,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
               </label>
               <input 
                 required
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none font-bold transition-all"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none font-black transition-all"
                 placeholder={t('placeholder_title')}
                 value={formData.title}
                 onChange={e => setFormData({...formData, title: e.target.value})}
@@ -351,13 +351,13 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
 
       {/* Item List */}
       <div className="bg-white rounded-[2.5rem] border border-slate-100 shadow-xl overflow-hidden overflow-x-auto">
-        <table className="w-full text-start min-w-[600px]">
+        <table className="w-full text-start min-w-[700px]">
           <thead className="bg-slate-50 border-b border-slate-100">
             <tr>
               <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-start">{t('type')}</th>
               <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-start">{t('placeholder_title')}</th>
               <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-start">{t('subjects')}</th>
-              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-start">{t('due')}</th>
+              <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-start">{t('due')} & {t('time')}</th>
               <th className="px-8 py-5 text-[10px] font-black text-slate-400 uppercase tracking-widest text-end">Actions</th>
             </tr>
           </thead>
@@ -376,23 +376,26 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
                   {subjects.find(s => s.id === item.subjectId)?.name[lang] || subjects.find(s => s.id === item.subjectId)?.name['en']}
                 </td>
                 <td className="px-8 py-5 text-slate-500 font-bold text-xs text-start">
-                  {new Date(item.date).toLocaleDateString(lang)} {item.time ? `@ ${item.time}` : ''}
+                  <div className="flex flex-col">
+                    <span>{new Date(item.date).toLocaleDateString(lang)}</span>
+                    <span className="text-indigo-600 font-black">@ {item.time || '08:00'}</span>
+                  </div>
                 </td>
                 <td className="px-8 py-5 text-end">
-                  <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
                       onClick={() => handleEdit(item)} 
-                      className="p-2 text-slate-300 hover:text-amber-600 hover:bg-white rounded-xl shadow-sm transition-all border border-transparent"
+                      className="p-3 text-slate-400 hover:text-amber-600 hover:bg-white rounded-xl shadow-sm transition-all border border-slate-100 hover:border-amber-200"
                       title="Edit"
                     >
-                      <Edit2 size={16}/>
+                      <Edit2 size={18}/>
                     </button>
                     <button 
                       onClick={() => deleteItem(item.id)} 
-                      className="p-2 text-slate-300 hover:text-red-600 hover:bg-white rounded-xl shadow-sm transition-all border border-transparent"
+                      className="p-3 text-slate-400 hover:text-red-600 hover:bg-white rounded-xl shadow-sm transition-all border border-slate-100 hover:border-red-200"
                       title="Delete"
                     >
-                      <Trash2 size={16}/>
+                      <Trash2 size={18}/>
                     </button>
                   </div>
                 </td>
