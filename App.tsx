@@ -16,8 +16,8 @@ import { CloudOff, AlertTriangle, WifiOff } from 'lucide-react';
 
 interface AuthContextType {
   user: User | null;
-  login: (email: string) => Promise<boolean>;
-  register: (name: string, email: string, secret?: string) => Promise<boolean>;
+  login: (email: string, remember: boolean) => Promise<boolean>;
+  register: (name: string, email: string, remember: boolean, secret?: string) => Promise<boolean>;
   logout: () => void;
   isDev: boolean;
   isAdmin: boolean;
@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
   const [isBrowserOffline, setIsBrowserOffline] = useState(!navigator.onLine);
   const [pendingEditItem, setPendingEditItem] = useState<AcademicItem | null>(null);
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
 
   const syncFromCloud = async () => {
     if (!supabaseService.isConfigured()) {
@@ -82,6 +83,17 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
+    // Check for remembered user
+    const remembered = localStorage.getItem('hub_user_session');
+    if (remembered) {
+      try {
+        const user = JSON.parse(remembered);
+        setCurrentUser(user);
+      } catch (e) {
+        localStorage.removeItem('hub_user_session');
+      }
+    }
+    
     syncFromCloud();
     const handleOnline = () => setIsBrowserOffline(false);
     const handleOffline = () => setIsBrowserOffline(true);
@@ -95,33 +107,37 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser) return;
-    const supabase = getSupabase();
-    const channel = supabase.channel('classroom_presence', {
-      config: { presence: { key: currentUser.id } },
-    });
-
-    channel
-      .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState();
-        setOnlineUserIds(new Set(Object.keys(state)));
-      })
-      .on('presence', { event: 'join' }, ({ key }) => {
-        setOnlineUserIds(prev => new Set([...prev, key]));
-      })
-      .on('presence', { event: 'leave' }, ({ key }) => {
-        setOnlineUserIds(prev => {
-          const next = new Set(prev);
-          next.delete(key);
-          return next;
-        });
-      })
-      .subscribe(async (status) => {
-        if (status === 'SUBSCRIBED') {
-          await channel.track({ user_id: currentUser.id, online_at: new Date().toISOString() });
-        }
+    try {
+      const supabase = getSupabase();
+      const channel = supabase.channel('classroom_presence', {
+        config: { presence: { key: currentUser.id } },
       });
 
-    return () => { channel.unsubscribe(); };
+      channel
+        .on('presence', { event: 'sync' }, () => {
+          const state = channel.presenceState();
+          setOnlineUserIds(new Set(Object.keys(state)));
+        })
+        .on('presence', { event: 'join' }, ({ key }) => {
+          setOnlineUserIds(prev => new Set([...prev, key]));
+        })
+        .on('presence', { event: 'leave' }, ({ key }) => {
+          setOnlineUserIds(prev => {
+            const next = new Set(prev);
+            next.delete(key);
+            return next;
+          });
+        })
+        .subscribe(async (status) => {
+          if (status === 'SUBSCRIBED') {
+            await channel.track({ user_id: currentUser.id, online_at: new Date().toISOString() });
+          }
+        });
+
+      return () => { channel.unsubscribe(); };
+    } catch (e) {
+      console.warn("Presence sync skipped: Missing API Keys");
+    }
   }, [currentUser]);
 
   useEffect(() => {
@@ -131,11 +147,14 @@ const App: React.FC = () => {
 
   const t = (key: string) => TRANSLATIONS[appState.language][key] || key;
 
-  const login = async (email: string) => {
+  const login = async (email: string, remember: boolean) => {
     try {
       const { data, error } = await supabaseService.getUserByEmail(email);
       if (data && !error) {
         setCurrentUser(data);
+        if (remember) {
+          localStorage.setItem('hub_user_session', JSON.stringify(data));
+        }
         return true;
       }
     } catch (e: any) {
@@ -144,7 +163,7 @@ const App: React.FC = () => {
     return false;
   };
 
-  const register = async (name: string, email: string, secret?: string) => {
+  const register = async (name: string, email: string, remember: boolean, secret?: string) => {
     const role = (secret === 'otmane55') ? UserRole.DEV : UserRole.STUDENT;
     const newUser: User = {
       id: crypto.randomUUID(),
@@ -160,6 +179,9 @@ const App: React.FC = () => {
       if (error) throw error;
       setAppState(prev => ({ ...prev, users: [...prev.users, newUser] }));
       setCurrentUser(newUser);
+      if (remember) {
+        localStorage.setItem('hub_user_session', JSON.stringify(newUser));
+      }
       return true;
     } catch (e: any) {
       alert(e.message || "Registration failed.");
@@ -168,6 +190,7 @@ const App: React.FC = () => {
   };
 
   const logout = () => {
+    localStorage.removeItem('hub_user_session');
     setCurrentUser(null);
     setCurrentView('overview');
   };
@@ -189,6 +212,11 @@ const App: React.FC = () => {
   const handleCalendarEditRequest = (item: AcademicItem) => {
     setPendingEditItem(item);
     setCurrentView('admin');
+  };
+
+  const handleSubjectSelectFromOverview = (subjectId: string) => {
+    setSelectedSubjectId(subjectId);
+    setCurrentView('subjects');
   };
 
   const authValue: AuthContextType = { 
@@ -244,14 +272,14 @@ const App: React.FC = () => {
           <DashboardLayout currentView={currentView} setView={setCurrentView}>
             {(() => {
               switch (currentView) {
-                case 'overview': return <Overview items={appState.items} subjects={appState.subjects} />;
+                case 'overview': return <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
                 case 'calendar': return <CalendarView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} onEditRequest={handleCalendarEditRequest} />;
                 case 'timetable': return <Timetable entries={appState.timetable} subjects={appState.subjects} onUpdate={updateAppState} />;
-                case 'subjects': return <SubjectsView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} />;
+                case 'subjects': return <SubjectsView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} initialSubjectId={selectedSubjectId} clearInitialSubject={() => setSelectedSubjectId(null)} />;
                 case 'classlist': return <ClassList users={appState.users} onUpdate={updateAppState} />;
-                case 'admin': return isAdmin ? <AdminPanel items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} initialEditItem={pendingEditItem} onEditHandled={() => setPendingEditItem(null)} /> : <Overview items={appState.items} subjects={appState.subjects} />;
-                case 'dev': return isDev ? <DevTools state={appState} onUpdate={updateAppState} /> : <Overview items={appState.items} subjects={appState.subjects} />;
-                default: return <Overview items={appState.items} subjects={appState.subjects} />;
+                case 'admin': return isAdmin ? <AdminPanel items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} initialEditItem={pendingEditItem} onEditHandled={() => setPendingEditItem(null)} /> : <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
+                case 'dev': return isDev ? <DevTools state={appState} onUpdate={updateAppState} /> : <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
+                default: return <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
               }
             })()}
           </DashboardLayout>
@@ -262,4 +290,3 @@ const App: React.FC = () => {
 };
 
 export default App;
- 
