@@ -3,14 +3,30 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppState, User, AcademicItem, TimetableEntry, Resource, UserRole } from '../types';
 
 const SUPABASE_URL = 'https://lbfdweyzaqmlkcfgixmn.supabase.co';
-// Directly access process.env.API_KEY as per system requirements
-const API_KEY = process.env.API_KEY || '';
+
+/**
+ * Resilient API Key Retrieval
+ * Checks process.env, import.meta (for Vite/Vercel), and window fallbacks.
+ */
+const getApiKey = (): string => {
+  if (typeof process !== 'undefined' && process.env?.API_KEY) {
+    return process.env.API_KEY;
+  }
+  // Fallback for different build environments (Vite/Vercel client-side)
+  const metaEnv = (import.meta as any).env;
+  if (metaEnv?.API_KEY) return metaEnv.API_KEY;
+  if (metaEnv?.VITE_API_KEY) return metaEnv.VITE_API_KEY;
+  
+  return (window as any).API_KEY || '';
+};
+
+const API_KEY = getApiKey();
 
 let supabaseInstance: SupabaseClient | null = null;
 
 export const getSupabase = () => {
   if (!API_KEY) {
-    throw new Error("The API_KEY environment variable is not set. Please check your configuration.");
+    throw new Error("The API_KEY environment variable is not set. Please ensure it is configured in your environment.");
   }
   if (!supabaseInstance) {
     supabaseInstance = createClient(SUPABASE_URL, API_KEY);
@@ -23,11 +39,12 @@ export const supabaseService = {
 
   fetchFullState: async () => {
     const client = getSupabase();
+    
     const [
-      { data: users },
-      { data: items },
-      { data: timetable },
-      { data: resources }
+      { data: users, error: uErr },
+      { data: items, error: iErr },
+      { data: timetable, error: tErr },
+      { data: resources, error: rErr }
     ] = await Promise.all([
       client.from('users').select('*'),
       client.from('academic_items').select('*'),
@@ -35,13 +52,16 @@ export const supabaseService = {
       client.from('resources').select('*')
     ]);
 
+    if (uErr) console.warn("Fetch users error:", uErr);
+    if (iErr) console.warn("Fetch items error:", iErr);
+
     const mappedItems = (items || []).map(item => ({
       id: item.id,
       title: item.title,
       subjectId: item.subject_id,
       type: item.type,
       date: item.date,
-      time: item.time || '08:00',
+      time: item.time || '08:00', // Default if missing
       location: item.location,
       notes: item.notes,
       resources: (resources || [])
