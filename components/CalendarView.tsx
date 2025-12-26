@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { AcademicItem, Subject, AppState } from '../types';
 import { useAuth } from '../App';
 import { 
@@ -12,18 +12,18 @@ import {
   MapPin, 
   X, 
   Calendar as CalendarIcon,
-  ChevronUp,
-  ChevronDown
+  Edit2
 } from 'lucide-react';
-import { SUBJECT_ICONS, APP_NAME } from '../constants';
+import { SUBJECT_ICONS } from '../constants';
 
 interface Props {
   items: AcademicItem[];
   subjects: Subject[];
   onUpdate: (updates: Partial<AppState>) => void;
+  onEditRequest?: (item: AcademicItem) => void;
 }
 
-const CalendarView: React.FC<Props> = ({ items, subjects, onUpdate }) => {
+const CalendarView: React.FC<Props> = ({ items, subjects, onUpdate, onEditRequest }) => {
   const { t, lang, isAdmin } = useAuth();
   const isRtl = lang === 'ar';
 
@@ -31,7 +31,9 @@ const CalendarView: React.FC<Props> = ({ items, subjects, onUpdate }) => {
     const today = new Date();
     const day = today.getDay();
     const diff = today.getDate() - day + (day === 0 ? -6 : 1); 
-    return new Date(new Date(today.setDate(diff)).setHours(0,0,0,0));
+    const d = new Date(today.setDate(diff));
+    d.setHours(0, 0, 0, 0);
+    return d;
   });
 
   const [selectedItem, setSelectedItem] = useState<AcademicItem | null>(null);
@@ -42,9 +44,16 @@ const CalendarView: React.FC<Props> = ({ items, subjects, onUpdate }) => {
     return d;
   });
 
+  // Fixed: Use local date string to avoid timezone "next day" shifts
   const getItemsForDay = (date: Date) => {
-    const dStr = date.toISOString().split('T')[0];
-    return items.filter(i => i.date === dStr);
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    const d = String(date.getDate()).padStart(2, '0');
+    const dStr = `${y}-${m}-${d}`;
+    
+    return items
+      .filter(i => i.date === dStr)
+      .sort((a, b) => (a.time || '00:00').localeCompare(b.time || '00:00'));
   };
 
   const navigateWeek = (weeks: number) => {
@@ -57,7 +66,9 @@ const CalendarView: React.FC<Props> = ({ items, subjects, onUpdate }) => {
     const today = new Date();
     const day = today.getDay();
     const diff = today.getDate() - day + (day === 0 ? -6 : 1); 
-    setCurrentWeekStart(new Date(new Date(today.setDate(diff)).setHours(0,0,0,0)));
+    const d = new Date(today.setDate(diff));
+    d.setHours(0, 0, 0, 0);
+    setCurrentWeekStart(d);
   };
 
   const isToday = (date: Date) => new Date().toDateString() === date.toDateString();
@@ -137,9 +148,9 @@ const CalendarView: React.FC<Props> = ({ items, subjects, onUpdate }) => {
                         <h4 className={`text-xs font-black leading-tight ${isExam ? 'text-red-900' : 'text-blue-900'}`}>
                           {item.title}
                         </h4>
-                        <div className="flex items-center gap-1.5 mt-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                          <Clock size={10} />
-                          <span className="text-[9px] font-bold">{item.time || '00:00'}</span>
+                        <div className="flex items-center gap-1.5 mt-2 opacity-60 group-hover:opacity-100 transition-opacity">
+                          <Clock size={10} className="text-indigo-500" />
+                          <span className="text-[9px] font-black text-slate-600">{item.time || '08:00'}</span>
                         </div>
                       </button>
                     );
@@ -163,12 +174,25 @@ const CalendarView: React.FC<Props> = ({ items, subjects, onUpdate }) => {
             <div className={`relative min-h-[160px] flex items-end p-8 md:p-10 ${
               selectedItem.type === 'exam' ? 'bg-gradient-to-br from-red-600 to-rose-700' : 'bg-gradient-to-br from-indigo-600 to-blue-700'
             }`}>
-              <button 
-                onClick={() => setSelectedItem(null)}
-                className="absolute top-8 right-8 p-3 bg-white/10 hover:bg-white/30 text-white rounded-2xl transition-all border border-white/20 backdrop-blur-md"
-              >
-                <X size={24} />
-              </button>
+              <div className="absolute top-8 right-8 flex gap-2">
+                {isAdmin && (
+                  <button 
+                    onClick={() => {
+                      if (onEditRequest) onEditRequest(selectedItem);
+                      setSelectedItem(null);
+                    }}
+                    className="p-3 bg-white/10 hover:bg-white/30 text-white rounded-2xl transition-all border border-white/20 backdrop-blur-md flex items-center gap-2 font-black text-xs uppercase tracking-widest"
+                  >
+                    <Edit2 size={18} /> {t('edit')}
+                  </button>
+                )}
+                <button 
+                  onClick={() => setSelectedItem(null)}
+                  className="p-3 bg-white/10 hover:bg-white/30 text-white rounded-2xl transition-all border border-white/20 backdrop-blur-md"
+                >
+                  <X size={24} />
+                </button>
+              </div>
               
               <div className="flex items-center gap-6">
                 <div className="w-20 h-20 rounded-[1.75rem] bg-white flex items-center justify-center text-indigo-600 shadow-2xl ring-8 ring-white/10 shrink-0">
@@ -195,9 +219,9 @@ const CalendarView: React.FC<Props> = ({ items, subjects, onUpdate }) => {
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{t('time_info')}</p>
                     <p className="text-sm font-black text-slate-800">
-                      {new Date(selectedItem.date).toLocaleDateString(lang, { dateStyle: 'long' })}
+                      {new Date(selectedItem.date.replace(/-/g, '/')).toLocaleDateString(lang, { dateStyle: 'long' })}
                       <span className="mx-2 text-slate-300">|</span>
-                      {selectedItem.time || '--:--'}
+                      <span className="text-indigo-600">{selectedItem.time || '08:00'}</span>
                     </p>
                   </div>
                 </div>
@@ -207,7 +231,7 @@ const CalendarView: React.FC<Props> = ({ items, subjects, onUpdate }) => {
                   </div>
                   <div>
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{t('location')}</p>
-                    <p className="text-sm font-black text-slate-800">{selectedItem.location || 'Classroom 2 (Scientific Wing)'}</p>
+                    <p className="text-sm font-black text-slate-800">{selectedItem.location || 'Classroom (Scientific Wing)'}</p>
                   </div>
                 </div>
               </div>
