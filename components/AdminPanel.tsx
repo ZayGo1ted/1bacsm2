@@ -164,7 +164,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
                 value={formData.subjectId}
                 onChange={e => setFormData({...formData, subjectId: e.target.value})}
               >
-                {subjects.map(s => <option key={s.id} value={s.id}>{s.name['en']}</option>)}
+                {subjects.map(s => <option key={s.id} value={s.id}>{s.name[lang] || s.name['en']}</option>)}
               </select>
             </div>
 
@@ -322,7 +322,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
                 </td>
                 <td className="px-8 py-5 font-black text-slate-900">{item.title}</td>
                 <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase text-start">
-                  {subjects.find(s => s.id === item.subjectId)?.name['en']}
+                  {subjects.find(s => s.id === item.subjectId)?.name[lang] || subjects.find(s => s.id === item.subjectId)?.name['en']}
                 </td>
                 <td className="px-8 py-5 text-slate-500 font-bold text-xs text-start">
                   {new Date(item.date).toLocaleDateString(lang)}
