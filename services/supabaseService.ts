@@ -1,4 +1,31 @@
 
+/**
+ * SUPABASE SQL SETUP (Run this in your Supabase SQL Editor to fix RLS errors):
+ * 
+ * -- 1. Create Tables
+ * CREATE TABLE IF NOT EXISTS users (id UUID PRIMARY KEY, email TEXT UNIQUE, name TEXT, role TEXT, student_number TEXT, created_at TIMESTAMPTZ DEFAULT NOW());
+ * CREATE TABLE IF NOT EXISTS academic_items (id UUID PRIMARY KEY, title TEXT, subject_id TEXT, type TEXT, date TEXT, time TEXT, location TEXT, notes TEXT);
+ * CREATE TABLE IF NOT EXISTS timetable (id UUID PRIMARY KEY, day INT, start_hour INT, end_hour INT, subject_id TEXT, color TEXT, room TEXT);
+ * CREATE TABLE IF NOT EXISTS resources (id UUID PRIMARY KEY, item_id UUID REFERENCES academic_items(id) ON DELETE CASCADE, title TEXT, type TEXT, url TEXT);
+ * 
+ * -- 2. Enable RLS
+ * ALTER TABLE users ENABLE ROW LEVEL SECURITY;
+ * ALTER TABLE academic_items ENABLE ROW LEVEL SECURITY;
+ * ALTER TABLE timetable ENABLE ROW LEVEL SECURITY;
+ * ALTER TABLE resources ENABLE ROW LEVEL SECURITY;
+ * 
+ * -- 3. Create Basic Policies (Allow all for anonymous users with API Key)
+ * CREATE POLICY "public_select_users" ON users FOR SELECT TO anon USING (true);
+ * CREATE POLICY "public_insert_users" ON users FOR INSERT TO anon WITH CHECK (true);
+ * CREATE POLICY "public_update_users" ON users FOR UPDATE TO anon USING (true);
+ * CREATE POLICY "public_delete_users" ON users FOR DELETE TO anon USING (true);
+ * CREATE POLICY "public_select_items" ON academic_items FOR SELECT TO anon USING (true);
+ * CREATE POLICY "public_insert_items" ON academic_items FOR INSERT TO anon WITH CHECK (true);
+ * CREATE POLICY "public_update_items" ON academic_items FOR UPDATE TO anon USING (true);
+ * CREATE POLICY "public_delete_items" ON academic_items FOR DELETE TO anon USING (true);
+ * CREATE POLICY "public_all_timetable" ON timetable FOR ALL TO anon USING (true);
+ * CREATE POLICY "public_all_resources" ON resources FOR ALL TO anon USING (true);
+ */
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppState, User, AcademicItem, TimetableEntry, Resource, UserRole } from '../types';
@@ -104,6 +131,23 @@ export const supabaseService = {
     const { data, error } = await getSupabase().from('users').insert([dbUser]).select();
     if (error) throw error;
     return { data, error };
+  },
+
+  updateUser: async (user: User) => {
+    const { error } = await getSupabase()
+      .from('users')
+      .update({
+        name: user.name,
+        role: user.role,
+        student_number: user.studentNumber
+      })
+      .eq('id', user.id);
+    if (error) throw error;
+  },
+
+  deleteUser: async (id: string) => {
+    const { error } = await getSupabase().from('users').delete().eq('id', id);
+    if (error) throw error;
   },
 
   getUserByEmail: async (email: string) => {
