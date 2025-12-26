@@ -10,7 +10,9 @@ import {
   Lock, 
   User as UserIcon,
   ChevronRight,
-  AlertTriangle
+  AlertTriangle,
+  CheckSquare,
+  Square
 } from 'lucide-react';
 import { APP_NAME } from '../constants';
 
@@ -19,6 +21,7 @@ const Login: React.FC = () => {
   const [email, setEmail] = useState('');
   const [name, setName] = useState('');
   const [secret, setSecret] = useState('');
+  const [remember, setRemember] = useState(true);
   const [error, setError] = useState('');
   const { login, register, t, lang, setLang } = useAuth();
 
@@ -27,10 +30,10 @@ const Login: React.FC = () => {
     setError('');
     try {
       if (isRegistering) {
-        const success = await register(name, email, secret);
+        const success = await register(name, email, remember, secret);
         if (!success) setError('Registration failed.');
       } else {
-        const success = await login(email);
+        const success = await login(email, remember);
         if (!success) setError('User not found.');
       }
     } catch (err: any) {
@@ -119,6 +122,19 @@ const Login: React.FC = () => {
               </div>
             </div>
           )}
+
+          <button 
+            type="button"
+            onClick={() => setRemember(!remember)}
+            className="flex items-center gap-2 p-1 group transition-all"
+          >
+            {remember ? (
+              <CheckSquare size={14} className="text-indigo-600" />
+            ) : (
+              <Square size={14} className="text-slate-300 group-hover:text-slate-400" />
+            )}
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Stay signed in</span>
+          </button>
           
           {error && (
             <div className="flex items-start gap-2 p-2 bg-rose-50 border border-rose-100 rounded-lg">
