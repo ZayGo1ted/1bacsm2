@@ -18,7 +18,8 @@ import {
   UploadCloud,
   FileUp,
   MapPin,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Save
 } from 'lucide-react';
 
 interface Props {
@@ -30,8 +31,12 @@ interface Props {
 const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
   const { t, lang } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const formRef = useRef<HTMLFormElement>(null);
+  
   const [isAdding, setIsAdding] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  
   const [formData, setFormData] = useState<Partial<AcademicItem>>({
     title: '',
     subjectId: subjects[0]?.id || '',
@@ -44,6 +49,24 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
   });
 
   const [resInput, setResInput] = useState({ title: '', url: '', type: 'pdf' as any });
+
+  const resetForm = () => {
+    setIsAdding(false);
+    setEditingId(null);
+    setFormData({
+      title: '', subjectId: subjects[0]?.id || '', type: 'homework', 
+      date: new Date().toISOString().split('T')[0], time: '08:00', location: '', notes: '', resources: []
+    });
+  };
+
+  const handleEdit = (item: AcademicItem) => {
+    setFormData({ ...item });
+    setEditingId(item.id);
+    setIsAdding(true);
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+  };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -86,26 +109,28 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const newItem: AcademicItem = {
-      id: crypto.randomUUID(),
+    
+    const academicItem: AcademicItem = {
+      id: editingId || crypto.randomUUID(),
       title: formData.title || 'Untitled',
-      subjectId: formData.subjectId || subjects[0].id,
+      subjectId: formData.subjectId || subjects[0]?.id || '',
       type: formData.type as any,
       date: formData.date || '',
       time: formData.time || '08:00',
-      location: formData.location,
+      location: formData.location || '',
       notes: formData.notes || '',
       resources: formData.resources || []
     };
 
     try {
-      await supabaseService.createAcademicItem(newItem);
-      onUpdate({ items: [newItem, ...items] });
-      setIsAdding(false);
-      setFormData({
-        title: '', subjectId: subjects[0].id, type: 'homework', 
-        date: new Date().toISOString().split('T')[0], time: '08:00', location: '', notes: '', resources: []
-      });
+      if (editingId) {
+        await supabaseService.updateAcademicItem(academicItem);
+        onUpdate({ items: items.map(i => i.id === editingId ? academicItem : i) });
+      } else {
+        await supabaseService.createAcademicItem(academicItem);
+        onUpdate({ items: [academicItem, ...items] });
+      }
+      resetForm();
     } catch (err) {
       alert("Failed to save to database.");
       console.error(err);
@@ -131,7 +156,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
           <p className="text-slate-500 font-bold mt-1">Admin Dashboard — Cloud Synced.</p>
         </div>
         <button 
-          onClick={() => setIsAdding(!isAdding)}
+          onClick={() => { if(isAdding) resetForm(); else setIsAdding(true); }}
           className={`px-8 py-4 rounded-[1.75rem] font-black shadow-2xl transition-all flex items-center gap-3 active:scale-95 ${
             isAdding 
               ? 'bg-rose-50 text-rose-600 hover:bg-rose-100 shadow-rose-100' 
@@ -143,7 +168,14 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
       </div>
 
       {isAdding && (
-        <form onSubmit={handleSubmit} className="bg-white p-6 md:p-12 rounded-[3rem] border border-slate-100 shadow-2xl space-y-10 animate-in slide-in-from-top-12 duration-700">
+        <form ref={formRef} onSubmit={handleSubmit} className="bg-white p-6 md:p-12 rounded-[3rem] border border-slate-100 shadow-2xl space-y-10 animate-in slide-in-from-top-12 duration-700">
+          <div className="flex items-center gap-3 mb-2">
+            <div className={`p-2 rounded-lg ${editingId ? 'bg-amber-100 text-amber-600' : 'bg-indigo-100 text-indigo-600'}`}>
+              {editingId ? <Edit2 size={18}/> : <Plus size={18}/>}
+            </div>
+            <h2 className="text-xl font-black text-slate-900">{editingId ? 'Edit Entry' : 'Create New Entry'}</h2>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="space-y-3">
               <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
@@ -184,7 +216,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
 
             <div className="space-y-3">
               <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
-                <Clock size={14}/> {t('time')}
+                <Clock size={14}/> {t('time')} (e.g. 08:30)
               </label>
               <input 
                 type="time"
@@ -306,8 +338,13 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
             </div>
           </div>
 
-          <button type="submit" className="w-full bg-indigo-600 py-6 text-white font-black rounded-[2.5rem] shadow-2xl hover:bg-indigo-700 transition-all text-xl">
-            {t('save')}
+          <button 
+            type="submit" 
+            className={`w-full py-6 text-white font-black rounded-[2.5rem] shadow-2xl transition-all text-xl flex items-center justify-center gap-3 ${
+              editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'
+            }`}
+          >
+            {editingId ? <><Save size={24}/> {t('save')}</> : <><Plus size={24}/> {t('add')}</>}
           </button>
         </form>
       )}
@@ -326,7 +363,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
           </thead>
           <tbody className="divide-y divide-slate-50">
             {items.map(item => (
-              <tr key={item.id} className="hover:bg-slate-50 transition-colors group">
+              <tr key={item.id} className={`hover:bg-slate-50 transition-colors group ${editingId === item.id ? 'bg-amber-50/50' : ''}`}>
                 <td className="px-8 py-5">
                   <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${
                     item.type === 'exam' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
@@ -343,7 +380,18 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
                 </td>
                 <td className="px-8 py-5 text-end">
                   <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button onClick={() => deleteItem(item.id)} className="p-2 text-slate-300 hover:text-red-600 hover:bg-white rounded-xl shadow-sm transition-all border border-transparent">
+                    <button 
+                      onClick={() => handleEdit(item)} 
+                      className="p-2 text-slate-300 hover:text-amber-600 hover:bg-white rounded-xl shadow-sm transition-all border border-transparent"
+                      title="Edit"
+                    >
+                      <Edit2 size={16}/>
+                    </button>
+                    <button 
+                      onClick={() => deleteItem(item.id)} 
+                      className="p-2 text-slate-300 hover:text-red-600 hover:bg-white rounded-xl shadow-sm transition-all border border-transparent"
+                      title="Delete"
+                    >
                       <Trash2 size={16}/>
                     </button>
                   </div>
