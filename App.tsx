@@ -84,7 +84,6 @@ const App: React.FC = () => {
   };
 
   useEffect(() => {
-    // Check for remembered user
     const remembered = localStorage.getItem('hub_user_session');
     if (remembered) {
       try {
@@ -106,17 +105,20 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // Real-time Listeners for Presence and User Role Changes
   useEffect(() => {
     if (!currentUser) return;
     try {
       const supabase = getSupabase();
-      const channel = supabase.channel('classroom_presence', {
+      
+      // 1. Presence Logic
+      const presenceChannel = supabase.channel('classroom_presence', {
         config: { presence: { key: currentUser.id } },
       });
 
-      channel
+      presenceChannel
         .on('presence', { event: 'sync' }, () => {
-          const state = channel.presenceState();
+          const state = presenceChannel.presenceState();
           setOnlineUserIds(new Set(Object.keys(state)));
         })
         .on('presence', { event: 'join' }, ({ key }) => {
@@ -131,15 +133,51 @@ const App: React.FC = () => {
         })
         .subscribe(async (status) => {
           if (status === 'SUBSCRIBED') {
-            await channel.track({ user_id: currentUser.id, online_at: new Date().toISOString() });
+            await presenceChannel.track({ user_id: currentUser.id, online_at: new Date().toISOString() });
           }
         });
 
-      return () => { channel.unsubscribe(); };
+      // 2. User Data Real-time Sync (Role changes)
+      const userSyncChannel = supabase.channel('user_updates')
+        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, payload => {
+          const updatedData = payload.new as any;
+          const mappedUser: User = {
+            id: updatedData.id,
+            email: updatedData.email,
+            name: updatedData.name,
+            role: updatedData.role as UserRole,
+            studentNumber: updatedData.student_number,
+            createdAt: updatedData.created_at
+          };
+
+          // Update general user list
+          setAppState(prev => ({
+            ...prev,
+            users: prev.users.map(u => u.id === mappedUser.id ? mappedUser : u)
+          }));
+
+          // CRITICAL: Update the logged-in user's state if they were the target of the update
+          setCurrentUser(current => {
+            if (current && current.id === mappedUser.id) {
+              // Only update if role or name changed to avoid unnecessary re-renders
+              if (current.role !== mappedUser.role || current.name !== mappedUser.name) {
+                localStorage.setItem('hub_user_session', JSON.stringify(mappedUser));
+                return mappedUser;
+              }
+            }
+            return current;
+          });
+        })
+        .subscribe();
+
+      return () => { 
+        presenceChannel.unsubscribe(); 
+        userSyncChannel.unsubscribe();
+      };
     } catch (e) {
-      console.warn("Presence sync skipped: Missing API Keys");
+      console.warn("Real-time sync skipped: Configuration issue");
     }
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   useEffect(() => {
     document.documentElement.dir = appState.language === 'ar' ? 'rtl' : 'ltr';
@@ -204,7 +242,19 @@ const App: React.FC = () => {
   };
 
   const updateAppState = async (updates: Partial<AppState>) => {
-    setAppState(prev => ({ ...prev, ...updates }));
+    setAppState(prev => {
+      const nextState = { ...prev, ...updates };
+      // Local sync of current user if user list was updated
+      if (updates.users && currentUser) {
+        const freshSelf = updates.users.find(u => u.id === currentUser.id);
+        if (freshSelf && (freshSelf.role !== currentUser.role || freshSelf.name !== currentUser.name)) {
+          setCurrentUser(freshSelf);
+          localStorage.setItem('hub_user_session', JSON.stringify(freshSelf));
+        }
+      }
+      return nextState;
+    });
+
     if (updates.timetable) {
       try { await supabaseService.updateTimetable(updates.timetable); } catch (e) {}
     }
