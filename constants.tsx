@@ -49,20 +49,6 @@ export const INITIAL_SUBJECTS: Subject[] = [
     color: 'bg-teal-600' 
   },
   { 
-  id: 'history', 
-  name: { 
-    en: 'History', 
-    fr: 'Histoire', 
-    ar: 'التاريخ' 
-  }, 
-  description: { 
-    en: 'Historical events and civilizations', 
-    fr: 'Événements historiques et civilisations', 
-    ar: 'الأحداث التاريخية والحضارات' 
-  }, 
-  color: 'bg-yellow-600' 
-  },
-  { 
     id: 'phil', 
     name: { en: 'Philosophy', fr: 'Philosophie', ar: 'الفلسفة' }, 
     description: { en: 'Reason and Truth', fr: 'Raison et Vérité', ar: 'المجزوءات الفلسفية' }, 
@@ -231,4 +217,3 @@ export const TRANSLATIONS: Record<Language, any> = {
     time_info: "معلومات الوقت"
   }
 };
-console.log("SUBJECTS LOADED:", INITIAL_SUBJECTS);
