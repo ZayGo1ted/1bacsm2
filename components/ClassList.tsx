@@ -21,22 +21,22 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
 
   const handleRoleChange = async (user: User, newRole: UserRole) => {
     if (!isDev) return;
-    const updatedUser = { ...user, role: newRole };
     try {
+      const updatedUser = { ...user, role: newRole };
       await supabaseService.updateUser(updatedUser);
       onUpdate({ users: users.map(u => u.id === user.id ? updatedUser : u) });
     } catch (err) {
-      alert("Failed to update user role.");
+      alert("Role update failed.");
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to remove this user?')) {
+    if (confirm('Delete this user account?')) {
       try {
         await supabaseService.deleteUser(id);
         onUpdate({ users: users.filter(u => u.id !== id) });
       } catch (err) {
-        alert("Failed to delete user.");
+        alert("Delete failed.");
       }
     }
   };
@@ -64,10 +64,10 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
         </div>
         <input
           type="text"
-          placeholder={isRtl ? 'البحث عن طالب...' : 'Search student...'}
+          placeholder="Search student by name or ID..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
-          className={`w-full bg-white border-2 border-slate-50 rounded-[2rem] py-6 px-8 shadow-xl shadow-slate-200/40 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all font-black outline-none ${isRtl ? 'pr-16' : 'pl-16'}`}
+          className={`w-full bg-white border-2 border-slate-50 rounded-[2.5rem] py-7 px-8 shadow-xl shadow-slate-200/40 outline-none font-black ${isRtl ? 'pr-16' : 'pl-16'}`}
         />
       </div>
 
@@ -75,71 +75,68 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
         {filtered.map(member => {
           const isOnline = onlineUserIds.has(member.id);
           return (
-            <div key={member.id} className="bg-white p-10 rounded-[3rem] border border-slate-50 shadow-xl flex flex-col md:flex-row items-center justify-between gap-10 group hover:border-indigo-300 transition-all relative overflow-hidden">
-              <div className="flex items-center gap-8 w-full">
+            <div key={member.id} className="bg-white p-12 rounded-[4rem] border border-slate-50 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-12 group hover:border-indigo-400 transition-all relative overflow-hidden">
+              <div className="flex items-center gap-10 w-full">
                 <div className="relative shrink-0">
-                  <div className="w-28 h-28 rounded-[2.5rem] bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-5xl border-4 border-white shadow-inner group-hover:scale-110 transition-transform duration-500">
+                  <div className="w-32 h-32 rounded-[3rem] bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-5xl border-4 border-white shadow-inner transition-transform duration-500 group-hover:scale-110">
                     {member.name.charAt(0)}
                   </div>
                   {isOnline && (
-                    <div className="absolute -bottom-1 -right-1 bg-white p-2 rounded-full shadow-lg">
-                      <div className="w-6 h-6 bg-emerald-500 rounded-full animate-pulse border-2 border-white"></div>
+                    <div className="absolute -bottom-2 -right-2 bg-white p-2.5 rounded-full shadow-lg">
+                      <div className="w-7 h-7 bg-emerald-500 rounded-full animate-pulse border-4 border-white"></div>
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0 space-y-3">
-                  <div className="flex items-center flex-wrap gap-3 mb-1">
-                    <h3 className="font-black text-slate-900 text-3xl tracking-tight truncate">{member.name}</h3>
+                <div className="flex-1 min-w-0 space-y-4">
+                  <div className="flex items-center flex-wrap gap-4">
+                    <h3 className="font-black text-slate-900 text-4xl tracking-tight truncate">{member.name}</h3>
                     <div className="flex gap-2">
-                      {member.role === UserRole.DEV && <ShieldAlert size={24} className="text-amber-500" />}
-                      {member.role === UserRole.ADMIN && <ShieldCheck size={24} className="text-indigo-500" />}
+                      {member.role === UserRole.DEV && <ShieldAlert size={28} className="text-amber-500" />}
+                      {member.role === UserRole.ADMIN && <ShieldCheck size={28} className="text-indigo-500" />}
                     </div>
                   </div>
-                  <div className="flex items-center gap-4">
-                    <p className="text-sm font-black text-slate-400 uppercase tracking-[0.2em]">{member.studentNumber || 'GUEST USER'}</p>
+                  <div className="flex items-center gap-5">
+                    <p className="text-base font-black text-slate-400 uppercase tracking-widest">{member.studentNumber || 'STU-000'}</p>
                     {isOnline && (
-                      <span className="flex items-center gap-1.5 text-[10px] font-black text-emerald-600 bg-emerald-50 px-3 py-1 rounded-full uppercase tracking-widest border border-emerald-100">
-                        <Activity size={12} className="animate-bounce" /> connected
+                      <span className="flex items-center gap-2 text-xs font-black text-emerald-600 bg-emerald-50 px-4 py-1.5 rounded-full uppercase tracking-widest border border-emerald-100">
+                        <Activity size={14} className="animate-bounce" /> connected
                       </span>
                     )}
                   </div>
-                  <p className="text-base text-slate-400 lowercase truncate font-medium">{member.email}</p>
+                  <p className="text-lg text-slate-400 lowercase truncate font-medium">{member.email}</p>
                   
                   {isDev && (
-                    <div className="mt-6 flex flex-col gap-2">
-                      <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest px-1">Access Level Control</label>
-                      <div className="flex items-center gap-3 bg-slate-50 p-3 rounded-2xl w-full max-w-[280px] border border-slate-100 focus-within:border-indigo-400 transition-all shadow-sm">
-                        <Settings2 size={18} className="text-slate-400 ml-1" />
-                        <select 
-                          className="bg-transparent flex-1 text-xs font-black uppercase tracking-widest outline-none border-none cursor-pointer text-slate-700"
-                          value={member.role}
-                          onChange={(e) => handleRoleChange(member, e.target.value as UserRole)}
-                        >
-                          {Object.values(UserRole).map(r => (
-                            <option key={r} value={r} className="font-bold">{r}</option>
-                          ))}
-                        </select>
-                      </div>
+                    <div className="mt-8 p-6 bg-slate-50 rounded-[2rem] border border-slate-100 w-full max-w-md shadow-inner space-y-3">
+                      <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
+                        <Settings2 size={14}/> Access Level Control
+                      </label>
+                      <select 
+                        className="bg-white w-full text-sm font-black uppercase tracking-widest py-3 px-4 rounded-xl border-2 border-slate-100 outline-none focus:border-indigo-500 transition-all cursor-pointer text-slate-700"
+                        value={member.role}
+                        onChange={(e) => handleRoleChange(member, e.target.value as UserRole)}
+                      >
+                        {Object.values(UserRole).map(r => (
+                          <option key={r} value={r}>{r}</option>
+                        ))}
+                      </select>
                     </div>
                   )}
                 </div>
               </div>
               
-              <div className="flex flex-row md:flex-col items-center justify-center gap-4 w-full md:w-auto border-t md:border-t-0 md:border-l border-slate-50 pt-8 md:pt-0 md:pl-10 shrink-0">
+              <div className="flex flex-row md:flex-col items-center justify-center gap-6 w-full md:w-auto border-t md:border-t-0 md:border-l border-slate-100 pt-10 md:pt-0 md:pl-12 shrink-0">
                 <a 
                   href={`mailto:${member.email}`} 
-                  className="p-5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-[1.75rem] transition-all border border-transparent hover:border-indigo-100 shadow-sm"
-                  title="Direct Message"
+                  className="p-6 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-[2rem] transition-all border-2 border-transparent hover:border-indigo-100 shadow-sm"
                 >
-                  <Mail size={32} />
+                  <Mail size={36} />
                 </a>
                 {isAdmin && member.role !== UserRole.DEV && (
                   <button 
                     onClick={() => handleDelete(member.id)} 
-                    className="p-5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-[1.75rem] transition-all border border-transparent hover:border-red-100 shadow-sm"
-                    title="Terminate Access"
+                    className="p-6 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-[2rem] transition-all border-2 border-transparent hover:border-red-100 shadow-sm"
                   >
-                    <Trash2 size={32} />
+                    <Trash2 size={36} />
                   </button>
                 )}
               </div>
