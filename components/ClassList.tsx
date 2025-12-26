@@ -75,48 +75,48 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
         {filtered.map(member => {
           const isOnline = onlineUserIds.has(member.id);
           return (
-            <div key={member.id} className="bg-white p-12 rounded-[4rem] border border-slate-50 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-12 group hover:border-indigo-400 transition-all relative overflow-hidden">
-              <div className="flex items-center gap-10 w-full">
+            <div key={member.id} className="bg-white p-14 rounded-[4.5rem] border border-slate-50 shadow-2xl flex flex-col md:flex-row items-center justify-between gap-12 group hover:border-indigo-400 transition-all relative overflow-hidden">
+              <div className="flex items-center gap-12 w-full">
                 <div className="relative shrink-0">
-                  <div className="w-32 h-32 rounded-[3rem] bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-5xl border-4 border-white shadow-inner transition-transform duration-500 group-hover:scale-110">
+                  <div className="w-36 h-36 rounded-[3.5rem] bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-6xl border-4 border-white shadow-inner transition-transform duration-500 group-hover:scale-110">
                     {member.name.charAt(0)}
                   </div>
                   {isOnline && (
-                    <div className="absolute -bottom-2 -right-2 bg-white p-2.5 rounded-full shadow-lg">
-                      <div className="w-7 h-7 bg-emerald-500 rounded-full animate-pulse border-4 border-white"></div>
+                    <div className="absolute -bottom-2 -right-2 bg-white p-3 rounded-full shadow-lg">
+                      <div className="w-8 h-8 bg-emerald-500 rounded-full animate-pulse border-4 border-white"></div>
                     </div>
                   )}
                 </div>
-                <div className="flex-1 min-w-0 space-y-4">
-                  <div className="flex items-center flex-wrap gap-4">
-                    <h3 className="font-black text-slate-900 text-4xl tracking-tight truncate">{member.name}</h3>
+                <div className="flex-1 min-w-0 space-y-5">
+                  <div className="flex items-center flex-wrap gap-5">
+                    <h3 className="font-black text-slate-900 text-5xl tracking-tighter truncate">{member.name}</h3>
                     <div className="flex gap-2">
-                      {member.role === UserRole.DEV && <ShieldAlert size={28} className="text-amber-500" />}
-                      {member.role === UserRole.ADMIN && <ShieldCheck size={28} className="text-indigo-500" />}
+                      {member.role === UserRole.DEV && <ShieldAlert size={32} className="text-amber-500" />}
+                      {member.role === UserRole.ADMIN && <ShieldCheck size={32} className="text-indigo-500" />}
                     </div>
                   </div>
-                  <div className="flex items-center gap-5">
-                    <p className="text-base font-black text-slate-400 uppercase tracking-widest">{member.studentNumber || 'STU-000'}</p>
+                  <div className="flex items-center gap-6">
+                    <p className="text-lg font-black text-slate-400 uppercase tracking-[0.2em]">{member.studentNumber || 'GUEST-001'}</p>
                     {isOnline && (
-                      <span className="flex items-center gap-2 text-xs font-black text-emerald-600 bg-emerald-50 px-4 py-1.5 rounded-full uppercase tracking-widest border border-emerald-100">
+                      <span className="flex items-center gap-2 text-xs font-black text-emerald-600 bg-emerald-50 px-5 py-2 rounded-full uppercase tracking-widest border border-emerald-100">
                         <Activity size={14} className="animate-bounce" /> connected
                       </span>
                     )}
                   </div>
-                  <p className="text-lg text-slate-400 lowercase truncate font-medium">{member.email}</p>
+                  <p className="text-xl text-slate-400 lowercase truncate font-medium">{member.email}</p>
                   
                   {isDev && (
-                    <div className="mt-8 p-6 bg-slate-50 rounded-[2rem] border border-slate-100 w-full max-w-md shadow-inner space-y-3">
-                      <label className="text-xs font-black text-slate-500 uppercase tracking-[0.2em] px-1 flex items-center gap-2">
-                        <Settings2 size={14}/> Access Level Control
+                    <div className="mt-10 p-8 bg-slate-50 rounded-[2.5rem] border border-slate-100 w-full max-w-lg shadow-inner space-y-4">
+                      <label className="text-sm font-black text-slate-500 uppercase tracking-[0.2em] px-1 flex items-center gap-3">
+                        <Settings2 size={18}/> Management Role
                       </label>
                       <select 
-                        className="bg-white w-full text-sm font-black uppercase tracking-widest py-3 px-4 rounded-xl border-2 border-slate-100 outline-none focus:border-indigo-500 transition-all cursor-pointer text-slate-700"
+                        className="bg-white w-full text-base font-black uppercase tracking-widest py-4 px-6 rounded-2xl border-2 border-slate-100 outline-none focus:border-indigo-500 transition-all cursor-pointer text-slate-700 shadow-sm"
                         value={member.role}
                         onChange={(e) => handleRoleChange(member, e.target.value as UserRole)}
                       >
                         {Object.values(UserRole).map(r => (
-                          <option key={r} value={r}>{r}</option>
+                          <option key={r} value={r} className="font-bold">{r}</option>
                         ))}
                       </select>
                     </div>
@@ -124,19 +124,21 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
                 </div>
               </div>
               
-              <div className="flex flex-row md:flex-col items-center justify-center gap-6 w-full md:w-auto border-t md:border-t-0 md:border-l border-slate-100 pt-10 md:pt-0 md:pl-12 shrink-0">
+              <div className="flex flex-row md:flex-col items-center justify-center gap-8 w-full md:w-auto border-t md:border-t-0 md:border-l border-slate-100 pt-12 md:pt-0 md:pl-14 shrink-0">
                 <a 
                   href={`mailto:${member.email}`} 
-                  className="p-6 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-[2rem] transition-all border-2 border-transparent hover:border-indigo-100 shadow-sm"
+                  className="p-8 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-[2.5rem] transition-all border-2 border-transparent hover:border-indigo-100 shadow-sm"
+                  title="Contact"
                 >
-                  <Mail size={36} />
+                  <Mail size={44} />
                 </a>
                 {isAdmin && member.role !== UserRole.DEV && (
                   <button 
                     onClick={() => handleDelete(member.id)} 
-                    className="p-6 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-[2rem] transition-all border-2 border-transparent hover:border-red-100 shadow-sm"
+                    className="p-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-[2.5rem] transition-all border-2 border-transparent hover:border-red-100 shadow-sm"
+                    title="Remove"
                   >
-                    <Trash2 size={36} />
+                    <Trash2 size={44} />
                   </button>
                 )}
               </div>
