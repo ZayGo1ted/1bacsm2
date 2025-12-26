@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { AcademicItem, Subject, AppState, Resource } from '../types';
 import { useAuth } from '../App';
 import { supabaseService } from '../services/supabaseService';
@@ -10,15 +10,11 @@ import {
   Calendar as CalendarIcon, 
   Clock, 
   Type, 
-  Link as LinkIcon, 
-  FileText, 
-  Video,
   AlertCircle,
   X,
   UploadCloud,
   FileUp,
   MapPin,
-  Image as ImageIcon,
   Save
 } from 'lucide-react';
 
@@ -26,9 +22,11 @@ interface Props {
   items: AcademicItem[];
   subjects: Subject[];
   onUpdate: (updates: Partial<AppState>) => void;
+  initialEditItem?: AcademicItem | null;
+  onEditHandled?: () => void;
 }
 
-const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
+const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate, initialEditItem, onEditHandled }) => {
   const { t, lang } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const formRef = useRef<HTMLFormElement>(null);
@@ -49,6 +47,14 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
   });
 
   const [resInput, setResInput] = useState({ title: '', url: '', type: 'pdf' as any });
+
+  // Handle cross-tab edit requests (e.g. from Calendar)
+  useEffect(() => {
+    if (initialEditItem) {
+      handleEdit(initialEditItem);
+      if (onEditHandled) onEditHandled();
+    }
+  }, [initialEditItem]);
 
   const resetForm = () => {
     setIsAdding(false);
@@ -183,7 +189,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
               </label>
               <input 
                 required
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none font-black transition-all"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 outline-none font-bold transition-all"
                 placeholder={t('placeholder_title')}
                 value={formData.title}
                 onChange={e => setFormData({...formData, title: e.target.value})}
@@ -193,7 +199,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
             <div className="space-y-3">
               <label className="text-xs font-black text-slate-400 uppercase tracking-widest">{t('subjects')}</label>
               <select 
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 outline-none font-black appearance-none text-slate-800"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 outline-none font-black appearance-none text-slate-800 cursor-pointer"
                 value={formData.subjectId}
                 onChange={e => setFormData({...formData, subjectId: e.target.value})}
               >
@@ -208,7 +214,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
               <input 
                 type="date"
                 required
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 outline-none font-black transition-all"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 outline-none font-black transition-all cursor-pointer"
                 value={formData.date}
                 onChange={e => setFormData({...formData, date: e.target.value})}
               />
@@ -221,7 +227,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
               <input 
                 type="time"
                 required
-                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 outline-none font-black transition-all"
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 outline-none font-black transition-all cursor-pointer"
                 value={formData.time}
                 onChange={e => setFormData({...formData, time: e.target.value})}
               />
@@ -341,7 +347,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
           <button 
             type="submit" 
             className={`w-full py-6 text-white font-black rounded-[2.5rem] shadow-2xl transition-all text-xl flex items-center justify-center gap-3 ${
-              editingId ? 'bg-amber-500 hover:bg-amber-600' : 'bg-indigo-600 hover:bg-indigo-700'
+              editingId ? 'bg-amber-500 hover:bg-amber-600 shadow-amber-200' : 'bg-indigo-600 hover:bg-indigo-700 shadow-indigo-200'
             }`}
           >
             {editingId ? <><Save size={24}/> {t('save')}</> : <><Plus size={24}/> {t('add')}</>}
@@ -362,44 +368,46 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
-            {items.map(item => (
-              <tr key={item.id} className={`hover:bg-slate-50 transition-colors group ${editingId === item.id ? 'bg-amber-50/50' : ''}`}>
-                <td className="px-8 py-5">
-                  <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${
-                    item.type === 'exam' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
-                  }`}>
-                    {t(item.type)}
-                  </span>
-                </td>
-                <td className="px-8 py-5 font-black text-slate-900">{item.title}</td>
-                <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase text-start">
-                  {subjects.find(s => s.id === item.subjectId)?.name[lang] || subjects.find(s => s.id === item.subjectId)?.name['en']}
-                </td>
-                <td className="px-8 py-5 text-slate-500 font-bold text-xs text-start">
-                  <div className="flex flex-col">
-                    <span>{new Date(item.date).toLocaleDateString(lang)}</span>
-                    <span className="text-indigo-600 font-black">@ {item.time || '08:00'}</span>
-                  </div>
-                </td>
-                <td className="px-8 py-5 text-end">
-                  <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={() => handleEdit(item)} 
-                      className="p-3 text-slate-400 hover:text-amber-600 hover:bg-white rounded-xl shadow-sm transition-all border border-slate-100 hover:border-amber-200"
-                      title="Edit"
-                    >
-                      <Edit2 size={18}/>
-                    </button>
-                    <button 
-                      onClick={() => deleteItem(item.id)} 
-                      className="p-3 text-slate-400 hover:text-red-600 hover:bg-white rounded-xl shadow-sm transition-all border border-slate-100 hover:border-red-200"
-                      title="Delete"
-                    >
-                      <Trash2 size={18}/>
-                    </button>
-                  </div>
-                </td>
-              </tr>
+            {items
+              .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+              .map(item => (
+                <tr key={item.id} className={`hover:bg-slate-50 transition-colors group ${editingId === item.id ? 'bg-amber-50/50' : ''}`}>
+                  <td className="px-8 py-5">
+                    <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${
+                      item.type === 'exam' ? 'bg-red-100 text-red-600' : 'bg-blue-100 text-blue-600'
+                    }`}>
+                      {t(item.type)}
+                    </span>
+                  </td>
+                  <td className="px-8 py-5 font-black text-slate-900">{item.title}</td>
+                  <td className="px-8 py-5 text-xs font-bold text-slate-400 uppercase text-start">
+                    {subjects.find(s => s.id === item.subjectId)?.name[lang] || subjects.find(s => s.id === item.subjectId)?.name['en']}
+                  </td>
+                  <td className="px-8 py-5 text-slate-500 font-bold text-xs text-start">
+                    <div className="flex flex-col">
+                      <span>{new Date(item.date.replace(/-/g, '/')).toLocaleDateString(lang)}</span>
+                      <span className="text-indigo-600 font-black">@ {item.time || '08:00'}</span>
+                    </div>
+                  </td>
+                  <td className="px-8 py-5 text-end">
+                    <div className="flex justify-end gap-2 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => handleEdit(item)} 
+                        className="p-3 text-slate-400 hover:text-amber-600 hover:bg-white rounded-xl shadow-sm transition-all border border-slate-100 hover:border-amber-200"
+                        title="Edit"
+                      >
+                        <Edit2 size={18}/>
+                      </button>
+                      <button 
+                        onClick={() => deleteItem(item.id)} 
+                        className="p-3 text-slate-400 hover:text-red-600 hover:bg-white rounded-xl shadow-sm transition-all border border-slate-100 hover:border-red-200"
+                        title="Delete"
+                      >
+                        <Trash2 size={18}/>
+                      </button>
+                    </div>
+                  </td>
+                </tr>
             ))}
           </tbody>
         </table>
