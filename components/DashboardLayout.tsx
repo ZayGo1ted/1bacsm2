@@ -39,10 +39,19 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
   if (isAdmin) navItems.push({ id: 'admin', label: t('management'), icon: <ShieldAlert size={16} /> });
   if (isDev) navItems.push({ id: 'dev', label: t('dev'), icon: <Code size={16} /> });
   
-  // Always include Credits at the bottom
+  // Credits is always available
   navItems.push({ id: 'credits', label: t('credits'), icon: <Heart size={16} /> });
 
   const isRtl = lang === 'ar';
+
+  // For the mobile bottom bar, we pick the most important 4 + Credits
+  const mobileBarItems = [
+    navItems.find(i => i.id === 'overview')!,
+    navItems.find(i => i.id === 'calendar')!,
+    navItems.find(i => i.id === 'timetable')!,
+    navItems.find(i => i.id === 'subjects')!,
+    navItems.find(i => i.id === 'credits')!,
+  ];
 
   return (
     <div className={`h-screen flex flex-col md:flex-row bg-slate-50 overflow-hidden ${isRtl ? 'font-[Tajawal,sans-serif]' : ''}`}>
@@ -167,9 +176,9 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
         </div>
       </main>
 
-      {/* Mobile Bottom Navigation Bar */}
+      {/* Mobile Bottom Navigation Bar - includes Heart (Credits) now */}
       <nav className="md:hidden fixed bottom-4 left-4 right-4 bg-slate-900/90 backdrop-blur-xl border border-white/10 px-6 py-3 flex justify-around items-center z-50 shadow-2xl rounded-2xl">
-        {navItems.slice(0, 5).map(item => (
+        {mobileBarItems.map(item => (
           <button 
             key={item.id} 
             onClick={() => setView(item.id)} 
