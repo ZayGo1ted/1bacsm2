@@ -1,102 +1,95 @@
 
+
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppState, User, AcademicItem, TimetableEntry, Resource, UserRole } from '../types';
 
 const SUPABASE_URL = 'https://lbfdweyzaqmlkcfgixmn.supabase.co';
 
-// Robust key detection for different environments
 const getApiKey = (): string => {
-  // 1. Try standard process.env (Node/Bundler)
-  if (typeof process !== 'undefined' && process.env?.SUPABASE_ANON_KEY) {
-    return process.env.SUPABASE_ANON_KEY;
+  if (typeof process !== 'undefined' && process.env?.API_KEY) {
+    return process.env.API_KEY;
   }
-  // 2. Try Vite style (very common)
-  if ((import.meta as any).env?.VITE_SUPABASE_ANON_KEY) {
-    return (import.meta as any).env.VITE_SUPABASE_ANON_KEY;
-  }
-  // 3. Try global window variable (Fallback)
-  if (typeof window !== 'undefined' && (window as any).SUPABASE_ANON_KEY) {
-    return (window as any).SUPABASE_ANON_KEY;
-  }
-  return '';
+  return (import.meta as any).env?.VITE_API_KEY || (window as any).API_KEY || '';
 };
 
-const ANON_KEY = getApiKey();
+const API_KEY = getApiKey();
 
-// We initialize the client inside a getter to prevent the "supabaseKey is required" crash on boot
 let supabaseInstance: SupabaseClient | null = null;
 
 export const getSupabase = () => {
-  if (!ANON_KEY) {
-    throw new Error("SUPABASE_ANON_KEY is missing. Please set it in your environment variables.");
+  if (!API_KEY) {
+    throw new Error("Cloud connection key is missing. Please ensure the API_KEY environment variable is set.");
   }
   if (!supabaseInstance) {
-    supabaseInstance = createClient(SUPABASE_URL, ANON_KEY);
+    supabaseInstance = createClient(SUPABASE_URL, API_KEY);
   }
   return supabaseInstance;
 };
 
 export const supabaseService = {
-  isConfigured: () => ANON_KEY.length > 0,
+  isConfigured: () => API_KEY.length > 0,
 
   fetchFullState: async () => {
-    try {
-      const client = getSupabase();
-      const { data: users, error: uErr } = await client.from('users').select('*');
-      const { data: items, error: iErr } = await client.from('academic_items').select('*');
-      const { data: timetable, error: tErr } = await client.from('timetable').select('*');
-      const { data: resources, error: rErr } = await client.from('resources').select('*');
+    const client = getSupabase();
+    
+    const [
+      { data: users, error: uErr },
+      { data: items, error: iErr },
+      { data: timetable, error: tErr },
+      { data: resources, error: rErr }
+    ] = await Promise.all([
+      client.from('users').select('*'),
+      client.from('academic_items').select('*'),
+      client.from('timetable').select('*'),
+      client.from('resources').select('*')
+    ]);
 
-      if (uErr || iErr || tErr || rErr) {
-        console.error("Database fetch error details:", { uErr, iErr, tErr, rErr });
-        throw new Error("Could not fetch data. Check your Supabase RLS policies.");
-      }
+    if (uErr) console.warn("Supabase RLS: Error fetching 'users'.", uErr);
+    if (iErr) console.warn("Supabase RLS: Error fetching 'academic_items'.", iErr);
+    if (tErr) console.warn("Supabase RLS: Error fetching 'timetable'.", tErr);
+    if (rErr) console.warn("Supabase RLS: Error fetching 'resources'.", rErr);
 
-      const mappedItems = (items || []).map(item => ({
-        id: item.id,
-        title: item.title,
-        subjectId: item.subject_id,
-        type: item.type,
-        date: item.date,
-        time: item.time,
-        location: item.location,
-        notes: item.notes,
-        resources: (resources || [])
-          .filter(r => r.item_id === item.id)
-          .map(r => ({
-            id: r.id,
-            title: r.title,
-            type: r.type,
-            url: r.url
-          }))
-      }));
+    const mappedItems = (items || []).map(item => ({
+      id: item.id,
+      title: item.title,
+      subjectId: item.subject_id,
+      type: item.type,
+      date: item.date,
+      time: item.time,
+      location: item.location,
+      notes: item.notes,
+      resources: (resources || [])
+        .filter(r => r.item_id === item.id)
+        .map(r => ({
+          id: r.id,
+          title: r.title,
+          type: r.type,
+          url: r.url
+        }))
+    }));
 
-      const mappedTimetable = (timetable || []).map(entry => ({
-        id: entry.id,
-        day: entry.day,
-        startHour: entry.start_hour,
-        endHour: entry.end_hour,
-        subjectId: entry.subject_id,
-        color: entry.color,
-        room: entry.room
-      }));
+    const mappedTimetable = (timetable || []).map(entry => ({
+      id: entry.id,
+      day: entry.day,
+      startHour: entry.start_hour,
+      endHour: entry.end_hour,
+      subjectId: entry.subject_id,
+      color: entry.color,
+      room: entry.room
+    }));
 
-      return {
-        users: (users || []).map(u => ({
-          id: u.id,
-          email: u.email,
-          name: u.name,
-          role: u.role as UserRole,
-          studentNumber: u.student_number,
-          createdAt: u.created_at
-        })),
-        items: mappedItems,
-        timetable: mappedTimetable
-      };
-    } catch (err) {
-      console.error("Supabase service error:", err);
-      throw err;
-    }
+    return {
+      users: (users || []).map(u => ({
+        id: u.id,
+        email: u.email,
+        name: u.name,
+        role: u.role as UserRole,
+        studentNumber: u.student_number,
+        createdAt: u.created_at
+      })),
+      items: mappedItems,
+      timetable: mappedTimetable
+    };
   },
 
   registerUser: async (user: User) => {
@@ -120,7 +113,10 @@ export const supabaseService = {
       .eq('email', email.toLowerCase())
       .maybeSingle();
     
-    if (error) throw error;
+    if (error) {
+      console.error("Supabase Login Error:", error);
+      throw new Error("Access denied by database. Check RLS policies.");
+    }
 
     if (data) {
       return {
@@ -171,6 +167,39 @@ export const supabaseService = {
     }
     
     return newItem;
+  },
+
+  updateAcademicItem: async (item: AcademicItem) => {
+    const client = getSupabase();
+    const itemData = {
+      title: item.title,
+      subject_id: item.subjectId,
+      type: item.type,
+      date: item.date,
+      time: item.time,
+      location: item.location,
+      notes: item.notes
+    };
+    
+    const { error: itemError } = await client
+      .from('academic_items')
+      .update(itemData)
+      .eq('id', item.id);
+    
+    if (itemError) throw itemError;
+
+    // Refresh resources (Delete all then insert new ones)
+    await client.from('resources').delete().eq('item_id', item.id);
+    if (item.resources.length > 0) {
+      const resourceData = item.resources.map(r => ({
+        id: r.id,
+        item_id: item.id,
+        title: r.title,
+        type: r.type,
+        url: r.url
+      }));
+      await client.from('resources').insert(resourceData);
+    }
   },
 
   deleteAcademicItem: async (id: string) => {
