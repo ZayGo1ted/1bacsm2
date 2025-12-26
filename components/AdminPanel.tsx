@@ -37,6 +37,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
     subjectId: subjects[0]?.id || '',
     type: 'homework',
     date: new Date().toISOString().split('T')[0],
+    time: '08:00',
     location: '',
     notes: '',
     resources: []
@@ -91,7 +92,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
       subjectId: formData.subjectId || subjects[0].id,
       type: formData.type as any,
       date: formData.date || '',
-      time: formData.time,
+      time: formData.time || '08:00',
       location: formData.location,
       notes: formData.notes || '',
       resources: formData.resources || []
@@ -103,7 +104,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
       setIsAdding(false);
       setFormData({
         title: '', subjectId: subjects[0].id, type: 'homework', 
-        date: new Date().toISOString().split('T')[0], location: '', notes: '', resources: []
+        date: new Date().toISOString().split('T')[0], time: '08:00', location: '', notes: '', resources: []
       });
     } catch (err) {
       alert("Failed to save to database.");
@@ -178,6 +179,19 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
                 className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 outline-none font-black transition-all"
                 value={formData.date}
                 onChange={e => setFormData({...formData, date: e.target.value})}
+              />
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-xs font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                <Clock size={14}/> {t('time')}
+              </label>
+              <input 
+                type="time"
+                required
+                className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl px-6 py-5 outline-none font-black transition-all"
+                value={formData.time}
+                onChange={e => setFormData({...formData, time: e.target.value})}
               />
             </div>
 
@@ -325,7 +339,7 @@ const AdminPanel: React.FC<Props> = ({ items, subjects, onUpdate }) => {
                   {subjects.find(s => s.id === item.subjectId)?.name[lang] || subjects.find(s => s.id === item.subjectId)?.name['en']}
                 </td>
                 <td className="px-8 py-5 text-slate-500 font-bold text-xs text-start">
-                  {new Date(item.date).toLocaleDateString(lang)}
+                  {new Date(item.date).toLocaleDateString(lang)} {item.time ? `@ ${item.time}` : ''}
                 </td>
                 <td className="px-8 py-5 text-end">
                   <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
