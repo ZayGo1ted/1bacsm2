@@ -1,8 +1,8 @@
 
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { User, UserRole, AppState, AcademicItem, Subject, Language } from './types';
-import { supabaseService } from './services/supabaseService';
-import { TRANSLATIONS, INITIAL_SUBJECTS, MOCK_ITEMS } from './constants';
+import { supabaseService, getSupabase } from './services/supabaseService';
+import { TRANSLATIONS, INITIAL_SUBJECTS } from './constants';
 import Login from './components/Login';
 import DashboardLayout from './components/DashboardLayout';
 import Overview from './components/Overview';
@@ -12,7 +12,7 @@ import ClassList from './components/ClassList';
 import AdminPanel from './components/AdminPanel';
 import DevTools from './components/DevTools';
 import Timetable from './components/Timetable';
-import { AlertTriangle, CloudOff } from 'lucide-react';
+import { CloudOff, AlertTriangle, WifiOff } from 'lucide-react';
 
 interface AuthContextType {
   user: User | null;
@@ -24,6 +24,7 @@ interface AuthContextType {
   t: (key: string) => string;
   lang: Language;
   setLang: (l: Language) => void;
+  onlineUserIds: Set<string>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -46,10 +47,13 @@ const App: React.FC = () => {
   const [currentView, setCurrentView] = useState('overview');
   const [isLoading, setIsLoading] = useState(true);
   const [configError, setConfigError] = useState<string | null>(null);
+  const [syncWarning, setSyncWarning] = useState<boolean>(false);
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
+  const [isBrowserOffline, setIsBrowserOffline] = useState(!navigator.onLine);
 
   const syncFromCloud = async () => {
     if (!supabaseService.isConfigured()) {
-      setConfigError("SUPABASE_ANON_KEY is not set in environment variables.");
+      setConfigError("The API_KEY environment variable is not set.");
       setIsLoading(false);
       return;
     }
@@ -64,8 +68,12 @@ const App: React.FC = () => {
       }));
       setConfigError(null);
     } catch (e: any) {
-      console.error("Cloud sync failed:", e);
-      setConfigError(e.message || "Failed to connect to database.");
+      console.error("Cloud sync failure:", e);
+      if (e.message?.includes("key") || e.message?.includes("URL")) {
+        setConfigError(e.message || "Failed to connect to cloud database.");
+      } else {
+        setSyncWarning(true);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -73,7 +81,47 @@ const App: React.FC = () => {
 
   useEffect(() => {
     syncFromCloud();
+    const handleOnline = () => setIsBrowserOffline(false);
+    const handleOffline = () => setIsBrowserOffline(true);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
   }, []);
+
+  // Real-time Presence tracking (Online/Offline)
+  useEffect(() => {
+    if (!currentUser) return;
+    const supabase = getSupabase();
+    const channel = supabase.channel('classroom_presence', {
+      config: { presence: { key: currentUser.id } },
+    });
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        setOnlineUserIds(new Set(Object.keys(state)));
+      })
+      .on('presence', { event: 'join' }, ({ key }) => {
+        setOnlineUserIds(prev => new Set([...prev, key]));
+      })
+      .on('presence', { event: 'leave' }, ({ key }) => {
+        setOnlineUserIds(prev => {
+          const next = new Set(prev);
+          next.delete(key);
+          return next;
+        });
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({ user_id: currentUser.id, online_at: new Date().toISOString() });
+        }
+      });
+
+    return () => { channel.unsubscribe(); };
+  }, [currentUser]);
 
   useEffect(() => {
     document.documentElement.dir = appState.language === 'ar' ? 'rtl' : 'ltr';
@@ -89,8 +137,8 @@ const App: React.FC = () => {
         setCurrentUser(data);
         return true;
       }
-    } catch (e) {
-      console.error("Login failed:", e);
+    } catch (e: any) {
+      alert(e.message || "Login failed.");
     }
     return false;
   };
@@ -108,16 +156,12 @@ const App: React.FC = () => {
 
     try {
       const { error } = await supabaseService.registerUser(newUser);
-      if (error) {
-        console.error("Registration error:", error);
-        return false;
-      }
-
+      if (error) throw error;
       setAppState(prev => ({ ...prev, users: [...prev.users, newUser] }));
       setCurrentUser(newUser);
       return true;
-    } catch (e) {
-      console.error("Registration failed:", e);
+    } catch (e: any) {
+      alert(e.message || "Registration failed.");
       return false;
     }
   };
@@ -136,26 +180,13 @@ const App: React.FC = () => {
 
   const updateAppState = async (updates: Partial<AppState>) => {
     setAppState(prev => ({ ...prev, ...updates }));
-    
     if (updates.timetable) {
-      try {
-        await supabaseService.updateTimetable(updates.timetable);
-      } catch (e) {
-        console.error("Failed to sync timetable:", e);
-      }
+      try { await supabaseService.updateTimetable(updates.timetable); } catch (e) {}
     }
   };
 
   const authValue: AuthContextType = { 
-    user: currentUser, 
-    login, 
-    register, 
-    logout, 
-    isDev, 
-    isAdmin, 
-    t, 
-    lang: appState.language, 
-    setLang 
+    user: currentUser, login, register, logout, isDev, isAdmin, t, lang: appState.language, setLang, onlineUserIds 
   };
 
   if (configError) {
@@ -165,18 +196,9 @@ const App: React.FC = () => {
           <div className="w-20 h-20 bg-rose-50 text-rose-500 rounded-3xl flex items-center justify-center mx-auto mb-4">
             <CloudOff size={40} />
           </div>
-          <h1 className="text-2xl font-black text-slate-900">Database Configuration Error</h1>
-          <p className="text-slate-500 font-bold text-sm leading-relaxed">
-            The application is unable to connect to Supabase because the <code className="bg-slate-100 px-2 py-1 rounded text-rose-600">SUPABASE_ANON_KEY</code> is missing or invalid.
-          </p>
-          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-left">
-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Technical Detail:</p>
-            <p className="text-xs font-mono text-slate-600 break-words">{configError}</p>
-          </div>
-          <button 
-            onClick={() => window.location.reload()}
-            className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black hover:bg-indigo-700 transition-all shadow-lg"
-          >
+          <h1 className="text-2xl font-black text-slate-900">Cloud Connection Error</h1>
+          <p className="text-slate-500 font-bold text-sm leading-relaxed">{configError}</p>
+          <button onClick={() => window.location.reload()} className="w-full bg-indigo-600 text-white py-4 rounded-2xl font-black hover:bg-indigo-700 transition-all shadow-lg">
             Retry Connection
           </button>
         </div>
@@ -189,41 +211,46 @@ const App: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="flex flex-col items-center gap-6">
           <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <div className="text-center">
-            <p className="font-black text-slate-900 text-lg">Initializing Secure Cloud</p>
-            <p className="font-bold text-slate-400 text-xs uppercase tracking-widest mt-1">Authenticating with Supabase...</p>
-          </div>
+          <p className="font-black text-slate-900 text-lg text-center px-4">Initializing Classroom Assets...</p>
         </div>
       </div>
     );
   }
 
-  if (!currentUser) {
-    return (
-      <AuthContext.Provider value={authValue}>
-        <Login />
-      </AuthContext.Provider>
-    );
-  }
-
-  const renderView = () => {
-    switch (currentView) {
-      case 'overview': return <Overview items={appState.items} subjects={appState.subjects} />;
-      case 'calendar': return <CalendarView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} />;
-      case 'timetable': return <Timetable entries={appState.timetable} subjects={appState.subjects} onUpdate={updateAppState} />;
-      case 'subjects': return <SubjectsView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} />;
-      case 'classlist': return <ClassList users={appState.users} onUpdate={updateAppState} />;
-      case 'admin': return isAdmin ? <AdminPanel items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} /> : <Overview items={appState.items} subjects={appState.subjects} />;
-      case 'dev': return isDev ? <DevTools state={appState} onUpdate={updateAppState} /> : <Overview items={appState.items} subjects={appState.subjects} />;
-      default: return <Overview items={appState.items} subjects={appState.subjects} />;
-    }
-  };
-
   return (
     <AuthContext.Provider value={authValue}>
-      <DashboardLayout currentView={currentView} setView={setCurrentView}>
-        {renderView()}
-      </DashboardLayout>
+      <div className="h-screen w-screen overflow-hidden bg-slate-50 relative">
+        {isBrowserOffline && (
+          <div className="fixed top-0 left-0 right-0 bg-slate-900 text-white p-2 text-center text-[10px] font-black z-[100] flex items-center justify-center gap-2">
+            <WifiOff size={12} className="text-rose-500" /> OFFLINE MODE: LOCAL ACCESS ONLY
+          </div>
+        )}
+        {!currentUser ? (
+          <>
+            {syncWarning && !isBrowserOffline && (
+              <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white p-2 text-center text-[10px] font-black z-[100] flex items-center justify-center gap-2">
+                <AlertTriangle size={12} /> DATABASE RESTRICTED: PLEASE CONTACT DEV
+              </div>
+            )}
+            <Login />
+          </>
+        ) : (
+          <DashboardLayout currentView={currentView} setView={setCurrentView}>
+            {(() => {
+              switch (currentView) {
+                case 'overview': return <Overview items={appState.items} subjects={appState.subjects} />;
+                case 'calendar': return <CalendarView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} />;
+                case 'timetable': return <Timetable entries={appState.timetable} subjects={appState.subjects} onUpdate={updateAppState} />;
+                case 'subjects': return <SubjectsView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} />;
+                case 'classlist': return <ClassList users={appState.users} onUpdate={updateAppState} />;
+                case 'admin': return isAdmin ? <AdminPanel items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} /> : <Overview items={appState.items} subjects={appState.subjects} />;
+                case 'dev': return isDev ? <DevTools state={appState} onUpdate={updateAppState} /> : <Overview items={appState.items} subjects={appState.subjects} />;
+                default: return <Overview items={appState.items} subjects={appState.subjects} />;
+              }
+            })()}
+          </DashboardLayout>
+        )}
+      </div>
     </AuthContext.Provider>
   );
 };
