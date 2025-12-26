@@ -231,3 +231,4 @@ export const TRANSLATIONS: Record<Language, any> = {
     time_info: "معلومات الوقت"
   }
 };
+console.log("SUBJECTS LOADED:", INITIAL_SUBJECTS);
