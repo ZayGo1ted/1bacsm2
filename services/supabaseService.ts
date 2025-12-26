@@ -2,34 +2,43 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppState, User, AcademicItem, TimetableEntry, Resource, UserRole } from '../types';
 
-const SUPABASE_URL = 'https://lbfdweyzaqmlkcfgixmn.supabase.co';
-
 /**
- * Robust API Key Retrieval for Vercel/Vite
+ * Robust Environment Variable Retrieval for Vercel/Vite
+ * This function looks for the keys you specifically set in Vercel:
+ * VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
  */
-const getApiKey = (): string => {
-  // Check standard process.env (Vercel Build/Node)
-  if (typeof process !== 'undefined' && process.env?.API_KEY) {
-    return process.env.API_KEY;
-  }
-  // Check Vite specific env (Client-side)
+const getEnvVar = (key: string): string => {
+  // 1. Check Vite's import.meta.env (Standard for your project)
   const metaEnv = (import.meta as any).env;
-  if (metaEnv) {
-    if (metaEnv.VITE_API_KEY) return metaEnv.VITE_API_KEY;
-    if (metaEnv.API_KEY) return metaEnv.API_KEY;
+  if (metaEnv && metaEnv[key]) return metaEnv[key];
+
+  // 2. Check process.env (Node/Build time fallback)
+  if (typeof process !== 'undefined' && process.env && process.env[key]) {
+    return process.env[key];
   }
-  // Check window fallback
-  return (window as any).API_KEY || '';
+
+  // 3. Check window fallback
+  if (typeof window !== 'undefined' && (window as any)[key]) {
+    return (window as any)[key];
+  }
+
+  return '';
 };
 
-const API_KEY = getApiKey();
+// Map your Vercel variables to the internal logic
+const SUPABASE_URL = getEnvVar('VITE_SUPABASE_URL') || 'https://lbfdweyzaqmlkcfgixmn.supabase.co';
+const API_KEY = getEnvVar('VITE_SUPABASE_ANON_KEY') || getEnvVar('API_KEY') || getEnvVar('VITE_API_KEY');
 
 let supabaseInstance: SupabaseClient | null = null;
 
 export const getSupabase = () => {
   if (!API_KEY) {
-    throw new Error("The API_KEY environment variable is not set. Please check your Vercel/Environment settings.");
+    throw new Error("Configuration Error: VITE_SUPABASE_ANON_KEY is missing in your environment variables.");
   }
+  if (!SUPABASE_URL) {
+    throw new Error("Configuration Error: VITE_SUPABASE_URL is missing in your environment variables.");
+  }
+  
   if (!supabaseInstance) {
     supabaseInstance = createClient(SUPABASE_URL, API_KEY);
   }
@@ -37,22 +46,25 @@ export const getSupabase = () => {
 };
 
 export const supabaseService = {
-  isConfigured: () => API_KEY.length > 0,
+  isConfigured: () => API_KEY.length > 0 && SUPABASE_URL.length > 0,
 
   fetchFullState: async () => {
     const client = getSupabase();
     
     const [
-      { data: users },
-      { data: items },
-      { data: timetable },
-      { data: resources }
+      { data: users, error: uErr },
+      { data: items, error: iErr },
+      { data: timetable, error: tErr },
+      { data: resources, error: rErr }
     ] = await Promise.all([
       client.from('users').select('*'),
       client.from('academic_items').select('*'),
       client.from('timetable').select('*'),
       client.from('resources').select('*')
     ]);
+
+    if (uErr) console.warn("Fetch users error:", uErr);
+    if (iErr) console.warn("Fetch items error:", iErr);
 
     const mappedItems = (items || []).map(item => ({
       id: item.id,
@@ -87,6 +99,7 @@ export const supabaseService = {
         id: entry.id,
         day: entry.day,
         startHour: entry.start_hour,
+        // Fixed: Map end_hour from database to endHour property defined in TimetableEntry type
         endHour: entry.end_hour,
         subjectId: entry.subject_id,
         color: entry.color,
@@ -194,6 +207,7 @@ export const supabaseService = {
     
     if (itemError) throw itemError;
 
+    // Refresh resources
     await client.from('resources').delete().eq('item_id', item.id);
     if (item.resources.length > 0) {
       const resourceData = item.resources.map(r => ({
