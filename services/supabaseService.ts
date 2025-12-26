@@ -19,7 +19,6 @@
  * CREATE POLICY "public_insert_users" ON users FOR INSERT TO anon WITH CHECK (true);
  * CREATE POLICY "public_select_items" ON academic_items FOR SELECT TO anon USING (true);
  * CREATE POLICY "public_insert_items" ON academic_items FOR INSERT TO anon WITH CHECK (true);
- * CREATE POLICY "public_update_items" ON academic_items FOR UPDATE TO anon USING (true);
  * CREATE POLICY "public_delete_items" ON academic_items FOR DELETE TO anon USING (true);
  * CREATE POLICY "public_all_timetable" ON timetable FOR ALL TO anon USING (true);
  * CREATE POLICY "public_all_resources" ON resources FOR ALL TO anon USING (true);
@@ -57,6 +56,7 @@ export const supabaseService = {
   fetchFullState: async () => {
     const client = getSupabase();
     
+    // Fetch each table individually to prevent one RLS error from killing the whole app load
     const [
       { data: users, error: uErr },
       { data: items, error: iErr },
@@ -69,6 +69,7 @@ export const supabaseService = {
       client.from('resources').select('*')
     ]);
 
+    // Log warnings instead of throwing immediately
     if (uErr) console.warn("Supabase RLS: Error fetching 'users'.", uErr);
     if (iErr) console.warn("Supabase RLS: Error fetching 'academic_items'.", iErr);
     if (tErr) console.warn("Supabase RLS: Error fetching 'timetable'.", tErr);
@@ -192,39 +193,6 @@ export const supabaseService = {
     }
     
     return newItem;
-  },
-
-  updateAcademicItem: async (item: AcademicItem) => {
-    const client = getSupabase();
-    const itemData = {
-      title: item.title,
-      subject_id: item.subjectId,
-      type: item.type,
-      date: item.date,
-      time: item.time,
-      location: item.location,
-      notes: item.notes
-    };
-    
-    const { error: itemError } = await client
-      .from('academic_items')
-      .update(itemData)
-      .eq('id', item.id);
-    
-    if (itemError) throw itemError;
-
-    // Refresh resources (Delete all then insert new ones)
-    await client.from('resources').delete().eq('item_id', item.id);
-    if (item.resources.length > 0) {
-      const resourceData = item.resources.map(r => ({
-        id: r.id,
-        item_id: item.id,
-        title: r.title,
-        type: r.type,
-        url: r.url
-      }));
-      await client.from('resources').insert(resourceData);
-    }
   },
 
   deleteAcademicItem: async (id: string) => {
