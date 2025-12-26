@@ -2,7 +2,8 @@
 import React, { useState } from 'react';
 import { User, AppState, UserRole } from '../types';
 import { useAuth } from '../App';
-import { Search, Mail, Trash2, ShieldCheck, User as UserIcon, ShieldAlert } from 'lucide-react';
+import { supabaseService } from '../services/supabaseService';
+import { Search, Mail, Trash2, ShieldCheck, ShieldAlert, Activity, Settings2 } from 'lucide-react';
 
 interface Props {
   users: User[];
@@ -10,7 +11,7 @@ interface Props {
 }
 
 const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
-  const { isAdmin, isDev, t, lang } = useAuth();
+  const { isAdmin, isDev, t, lang, onlineUserIds } = useAuth();
   const [searchTerm, setSearchTerm] = useState('');
   
   const filtered = users.filter(s => 
@@ -18,15 +19,25 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
     s.studentNumber?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const changeRole = (userId: string, role: UserRole) => {
+  const handleRoleChange = async (user: User, newRole: UserRole) => {
     if (!isDev) return;
-    const updatedUsers = users.map(u => u.id === userId ? { ...u, role } : u);
-    onUpdate({ users: updatedUsers });
+    const updatedUser = { ...user, role: newRole };
+    try {
+      await supabaseService.updateUser(updatedUser);
+      onUpdate({ users: users.map(u => u.id === user.id ? updatedUser : u) });
+    } catch (err) {
+      alert("Failed to update user role.");
+    }
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (confirm('Are you sure you want to remove this user?')) {
-      onUpdate({ users: users.filter(u => u.id !== id) });
+      try {
+        await supabaseService.deleteUser(id);
+        onUpdate({ users: users.filter(u => u.id !== id) });
+      } catch (err) {
+        alert("Failed to delete user.");
+      }
     }
   };
 
@@ -37,7 +48,13 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-black text-slate-900">{t('classlist')}</h1>
-          <p className="text-slate-500 font-bold">{users.length} members found.</p>
+          <div className="flex items-center gap-3 mt-1">
+            <p className="text-slate-500 font-bold">{users.length} members found.</p>
+            <div className="flex items-center gap-1.5 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-100">
+               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
+               <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest">{onlineUserIds.size} active now</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -54,55 +71,74 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
         />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {filtered.map(member => (
-          <div key={member.id} className="bg-white p-6 rounded-[2.5rem] border border-slate-50 shadow-lg flex flex-col sm:flex-row items-center justify-between gap-6 group hover:border-indigo-200 transition-all relative">
-            <div className="flex items-center gap-5 w-full">
-              <div className="w-20 h-20 shrink-0 rounded-[1.75rem] bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-3xl border-4 border-white shadow-inner group-hover:scale-105 transition-transform">
-                {member.name.charAt(0)}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <h3 className="font-black text-slate-900 text-xl leading-none truncate">{member.name}</h3>
-                  {member.role === UserRole.DEV && <ShieldAlert size={18} className="text-amber-500" />}
-                  {member.role === UserRole.ADMIN && <ShieldCheck size={18} className="text-indigo-500" />}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+        {filtered.map(member => {
+          const isOnline = onlineUserIds.has(member.id);
+          return (
+            <div key={member.id} className="bg-white p-8 rounded-[3rem] border border-slate-50 shadow-xl flex flex-col md:flex-row items-center justify-between gap-8 group hover:border-indigo-300 transition-all relative">
+              <div className="flex items-center gap-6 w-full">
+                <div className="relative shrink-0">
+                  <div className="w-24 h-24 rounded-[2rem] bg-indigo-50 flex items-center justify-center text-indigo-600 font-black text-4xl border-4 border-white shadow-inner group-hover:scale-110 transition-transform duration-500">
+                    {member.name.charAt(0)}
+                  </div>
+                  {isOnline && (
+                    <div className="absolute -bottom-1 -right-1 bg-white p-1.5 rounded-full shadow-lg">
+                      <div className="w-5 h-5 bg-emerald-500 rounded-full animate-pulse border-2 border-white"></div>
+                    </div>
+                  )}
                 </div>
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{member.studentNumber || 'EXTERNAL'}</p>
-                <p className="text-xs text-slate-400 lowercase truncate">{member.email}</p>
-              </div>
-            </div>
-            
-            <div className="flex flex-col items-center sm:items-end gap-4 w-full sm:w-auto">
-              {isDev && (
-                <div className="flex flex-wrap gap-1 bg-slate-100 p-1 rounded-xl w-full sm:w-auto justify-center">
-                  {Object.values(UserRole).map(r => (
-                    <button 
-                      key={r}
-                      onClick={() => changeRole(member.id, r)}
-                      className={`px-3 py-1.5 text-[8px] font-black rounded-lg transition-all border ${
-                        member.role === r 
-                          ? 'bg-indigo-600 text-white border-indigo-600 shadow-md' 
-                          : 'text-slate-400 bg-white border-transparent hover:text-indigo-600'
-                      }`}
-                    >
-                      {r}
-                    </button>
-                  ))}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center flex-wrap gap-2 mb-2">
+                    <h3 className="font-black text-slate-900 text-2xl leading-none truncate">{member.name}</h3>
+                    {member.role === UserRole.DEV && <ShieldAlert size={20} className="text-amber-500" />}
+                    {member.role === UserRole.ADMIN && <ShieldCheck size={20} className="text-indigo-500" />}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest">{member.studentNumber || 'EXTERNAL'}</p>
+                    {isOnline && (
+                      <span className="flex items-center gap-1 text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full uppercase tracking-widest border border-emerald-100">
+                        <Activity size={10} /> active
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-slate-400 lowercase truncate mt-2 font-medium">{member.email}</p>
+                  
+                  {isDev && (
+                    <div className="mt-4 flex items-center gap-3 bg-slate-50 p-2 rounded-2xl w-fit border border-slate-100">
+                      <Settings2 size={14} className="text-slate-400 ml-1" />
+                      <select 
+                        className="bg-transparent text-[10px] font-black uppercase tracking-widest outline-none border-none cursor-pointer text-slate-600"
+                        value={member.role}
+                        onChange={(e) => handleRoleChange(member, e.target.value as UserRole)}
+                      >
+                        {Object.values(UserRole).map(r => <option key={r} value={r}>{r}</option>)}
+                      </select>
+                    </div>
+                  )}
                 </div>
-              )}
-              <div className="flex gap-2">
-                <a href={`mailto:${member.email}`} className="p-3 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all border border-transparent hover:border-indigo-100">
-                  <Mail size={22} />
+              </div>
+              
+              <div className="flex flex-row md:flex-col items-center justify-center gap-3 w-full md:w-auto border-t md:border-t-0 md:border-l border-slate-50 pt-6 md:pt-0 md:pl-8">
+                <a 
+                  href={`mailto:${member.email}`} 
+                  className="p-4 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-2xl transition-all border border-transparent hover:border-indigo-100 shadow-sm"
+                  title="Send Email"
+                >
+                  <Mail size={24} />
                 </a>
                 {isAdmin && member.role !== UserRole.DEV && (
-                  <button onClick={() => handleDelete(member.id)} className="p-3 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all border border-transparent hover:border-red-100">
-                    <Trash2 size={22} />
+                  <button 
+                    onClick={() => handleDelete(member.id)} 
+                    className="p-4 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-2xl transition-all border border-transparent hover:border-red-100 shadow-sm"
+                    title="Remove User"
+                  >
+                    <Trash2 size={24} />
                   </button>
                 )}
               </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
