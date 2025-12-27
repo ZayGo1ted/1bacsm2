@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useAuth } from '../App';
 import { TimetableEntry, Subject, AppState } from '../types';
@@ -11,7 +10,7 @@ interface Props {
 }
 
 const Timetable: React.FC<Props> = ({ entries, subjects, onUpdate }) => {
-  const { t, lang, isDev } = useAuth();
+  const { t, lang, isAdmin } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
   const [newEntry, setNewEntry] = useState<Partial<TimetableEntry>>({
     day: 1,
@@ -52,12 +51,12 @@ const Timetable: React.FC<Props> = ({ entries, subjects, onUpdate }) => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700 h-full max-h-[calc(100vh-140px)] flex flex-col">
-      <div className="flex justify-between items-end shrink-0">
+      <div className="flex justify-between items-end shrink-0 px-1">
         <div>
           <h1 className="text-3xl font-black text-slate-900 tracking-tight">{t('timetable')}</h1>
           <p className="text-slate-500 font-bold text-sm">1Bac SM - Science Math Weekly Schedule</p>
         </div>
-        {isDev && (
+        {isAdmin && (
           <button 
             onClick={() => setIsEditing(!isEditing)}
             className={`px-6 py-3 rounded-2xl font-black shadow-xl transition-all flex items-center gap-2 ${
@@ -65,7 +64,7 @@ const Timetable: React.FC<Props> = ({ entries, subjects, onUpdate }) => {
             }`}
           >
             {isEditing ? <X size={20} /> : <Edit2 size={20} />}
-            <span className="hidden sm:inline">{isEditing ? t('cancel') : 'Customize'}</span>
+            <span className="hidden sm:inline">{isEditing ? t('cancel') : 'Edit Schedule'}</span>
           </button>
         )}
       </div>
