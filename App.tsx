@@ -12,7 +12,6 @@ import ClassList from './components/ClassList';
 import AdminPanel from './components/AdminPanel';
 import DevTools from './components/DevTools';
 import Timetable from './components/Timetable';
-import GradeSimulator from './components/GradeSimulator';
 import Credits from './components/Credits';
 import { CloudOff, AlertTriangle, WifiOff } from 'lucide-react';
 
@@ -359,7 +358,6 @@ const App: React.FC = () => {
                 case 'overview': return <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
                 case 'calendar': return <CalendarView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} onEditRequest={handleCalendarEditRequest} />;
                 case 'timetable': return <Timetable entries={appState.timetable} subjects={appState.subjects} onUpdate={updateAppState} />;
-                case 'simulator': return <GradeSimulator subjects={appState.subjects} />;
                 case 'subjects': return <SubjectsView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} initialSubjectId={selectedSubjectId} clearInitialSubject={() => setSelectedSubjectId(null)} />;
                 case 'classlist': return <ClassList users={appState.users} onUpdate={updateAppState} />;
                 case 'credits': return <Credits />;
