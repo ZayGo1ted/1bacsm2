@@ -1,21 +1,28 @@
-
 <!DOCTYPE html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!-- PWA Manifest & Icons -->
     <link rel="manifest" href="/manifest.json">
     <meta name="theme-color" content="#4f46e5">
     <link rel="icon" href="/graduation-cap.png" sizes="192x192">
-    <title>1Bacsm 2 | Classroom Hub</title>
+
+    <!-- Title -->
+    <title>1BacSM 2 | Classroom Hub</title>
+
+    <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Fonts -->
     <style>
       @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Tajawal:wght@300;400;500;700;800;900&display=swap');
-      
+
       :root {
         --font-primary: 'Inter', sans-serif;
       }
-      
+
       [lang="ar"] {
         --font-primary: 'Tajawal', sans-serif;
       }
@@ -26,6 +33,7 @@
         overflow-x: hidden;
       }
 
+      /* Custom Scrollbar */
       ::-webkit-scrollbar {
         width: 6px;
       }
@@ -48,21 +56,28 @@
         transform: scaleX(-1);
       }
     </style>
+
+    <!-- Import Map for ESM modules -->
     <script type="importmap">
     {
       "imports": {
         "react/": "https://esm.sh/react@^19.2.3/",
         "react": "https://esm.sh/react@^19.2.3",
-        "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
         "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+        "lucide-react": "https://esm.sh/lucide-react@^0.562.0",
         "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.39.0"
       }
     }
     </script>
-  <link rel="stylesheet" href="/index.css">
-</head>
+
+    <!-- Global CSS -->
+    <link rel="stylesheet" href="/index.css">
+  </head>
+
   <body>
     <div id="root"></div>
-  <script type="module" src="/index.tsx"></script>
-</body>
+
+    <!-- Main App Entry -->
+    <script type="module" src="/index.tsx"></script>
+  </body>
 </html>
