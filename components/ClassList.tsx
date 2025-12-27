@@ -23,9 +23,9 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
     if (!isDev) return;
     try {
       const updatedUser = { ...targetUser, role: newRole };
-      // 1. Database Update
+      // Database Update
       await supabaseService.updateUser(updatedUser);
-      // 2. Local State Update (App.tsx will handle syncing currentUser if needed)
+      // Local state update triggers the App.tsx logic
       onUpdate({ users: users.map(u => u.id === targetUser.id ? updatedUser : u) });
     } catch (err) {
       alert("Role update failed. Please check your connection.");
@@ -33,12 +33,12 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (confirm('Are you sure you want to permanently delete this user?')) {
+    if (confirm('DANGER: Permanently delete this user? This cannot be undone.')) {
       try {
         await supabaseService.deleteUser(id);
         onUpdate({ users: users.filter(u => u.id !== id) });
       } catch (err) {
-        alert("Delete failed. Please check your connection.");
+        alert("Delete failed. You may not have sufficient permissions.");
       }
     }
   };
@@ -78,31 +78,31 @@ const ClassList: React.FC<Props> = ({ users, onUpdate }) => {
         {filtered.map(member => {
           const isOnline = onlineUserIds.has(member.id);
           
-          // Logic: DEVs can delete anyone but themselves. 
-          // ADMINs can delete non-DEVs but not themselves.
+          // DEVs can delete anyone but themselves. 
+          // ADMINs can delete anyone who isn't a DEV and isn't themselves.
           const canDelete = (isDev || isAdmin) && 
                             member.id !== currentUser?.id && 
                             (isDev || member.role !== UserRole.DEV);
           
           return (
             <div key={member.id} className="bg-white p-4 rounded-[1.5rem] border border-slate-100 shadow-sm flex flex-col items-center text-center group hover:shadow-xl hover:border-indigo-100 transition-all relative overflow-hidden">
-              {/* Action Buttons */}
+              {/* Action Buttons - More Visible Now */}
               <div className="absolute top-2 right-2 flex flex-col gap-1 z-10">
                 {canDelete && (
                   <button 
                     onClick={() => handleDelete(member.id)} 
-                    className="p-1.5 text-rose-300 hover:text-rose-600 bg-rose-50/0 hover:bg-rose-50 rounded-lg transition-all"
+                    className="p-2 text-rose-500 hover:text-white bg-rose-50 hover:bg-rose-600 rounded-xl transition-all shadow-sm"
                     title="Delete User"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={16} />
                   </button>
                 )}
                 <a 
                   href={`mailto:${member.email}`} 
-                  className="p-1.5 text-slate-300 hover:text-indigo-600 bg-slate-50/0 hover:bg-indigo-50 rounded-lg transition-all"
+                  className="p-2 text-slate-400 hover:text-white bg-slate-50 hover:bg-indigo-600 rounded-xl transition-all shadow-sm"
                   title="Contact User"
                 >
-                  <Mail size={14} />
+                  <Mail size={16} />
                 </a>
               </div>
 
