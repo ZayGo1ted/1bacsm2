@@ -13,7 +13,6 @@ import AdminPanel from './components/AdminPanel';
 import DevTools from './components/DevTools';
 import Timetable from './components/Timetable';
 import Credits from './components/Credits';
-import GradeSimulator from './components/GradeSimulator';
 import { CloudOff, AlertTriangle, WifiOff } from 'lucide-react';
 
 interface AuthContextType {
