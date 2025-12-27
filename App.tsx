@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, createContext, useContext } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
 import { User, UserRole, AppState, AcademicItem, Subject, Language } from './types';
 import { supabaseService, getSupabase } from './services/supabaseService';
 import { TRANSLATIONS, INITIAL_SUBJECTS } from './constants';
@@ -83,6 +83,18 @@ const App: React.FC = () => {
     }
   };
 
+  const refreshCurrentProfile = useCallback(async (email: string) => {
+    try {
+      const { data } = await supabaseService.getUserByEmail(email);
+      if (data) {
+        setCurrentUser(data);
+        localStorage.setItem('hub_user_session', JSON.stringify(data));
+      }
+    } catch (e) {
+      console.error("Failed to refresh profile", e);
+    }
+  }, []);
+
   useEffect(() => {
     const remembered = localStorage.getItem('hub_user_session');
     if (remembered) {
@@ -138,35 +150,18 @@ const App: React.FC = () => {
         });
 
       // 2. User Data Real-time Sync (Role changes)
+      // When any user is updated, we re-fetch our own profile if the ID matches.
       const userSyncChannel = supabase.channel('user_updates')
-        .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, payload => {
-          const updatedData = payload.new as any;
-          const mappedUser: User = {
-            id: updatedData.id,
-            email: updatedData.email,
-            name: updatedData.name,
-            role: updatedData.role as UserRole,
-            studentNumber: updatedData.student_number,
-            createdAt: updatedData.created_at
-          };
-
-          // Update general user list
-          setAppState(prev => ({
-            ...prev,
-            users: prev.users.map(u => u.id === mappedUser.id ? mappedUser : u)
-          }));
-
-          // CRITICAL: Update the logged-in user's state if they were the target of the update
-          setCurrentUser(current => {
-            if (current && current.id === mappedUser.id) {
-              // Only update if role or name changed to avoid unnecessary re-renders
-              if (current.role !== mappedUser.role || current.name !== mappedUser.name) {
-                localStorage.setItem('hub_user_session', JSON.stringify(mappedUser));
-                return mappedUser;
-              }
-            }
-            return current;
-          });
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, payload => {
+          const updatedId = (payload.new as any)?.id || (payload.old as any)?.id;
+          
+          if (updatedId === currentUser.id) {
+            // Re-fetch our profile to ensure we have the LATEST role from the DB
+            refreshCurrentProfile(currentUser.email);
+          }
+          
+          // Also trigger a general refresh of the class list for everyone
+          syncFromCloud();
         })
         .subscribe();
 
@@ -175,9 +170,9 @@ const App: React.FC = () => {
         userSyncChannel.unsubscribe();
       };
     } catch (e) {
-      console.warn("Real-time sync skipped: Configuration issue");
+      console.warn("Real-time sync error:", e);
     }
-  }, [currentUser?.id]);
+  }, [currentUser?.id, currentUser?.email, refreshCurrentProfile]);
 
   useEffect(() => {
     document.documentElement.dir = appState.language === 'ar' ? 'rtl' : 'ltr';
@@ -244,10 +239,10 @@ const App: React.FC = () => {
   const updateAppState = async (updates: Partial<AppState>) => {
     setAppState(prev => {
       const nextState = { ...prev, ...updates };
-      // Local sync of current user if user list was updated
+      // Local sync if list was updated manually by this user
       if (updates.users && currentUser) {
         const freshSelf = updates.users.find(u => u.id === currentUser.id);
-        if (freshSelf && (freshSelf.role !== currentUser.role || freshSelf.name !== currentUser.name)) {
+        if (freshSelf && freshSelf.role !== currentUser.role) {
           setCurrentUser(freshSelf);
           localStorage.setItem('hub_user_session', JSON.stringify(freshSelf));
         }
