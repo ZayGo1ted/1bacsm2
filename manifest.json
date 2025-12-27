@@ -1,0 +1,22 @@
+{
+  "name": "1BacSM",
+  "short_name": "1BacSM",
+  "description": "Classroom Hub for 1BacSM",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#4f46e5",
+  "theme_color": "#4f46e5",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/graduation-cap.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/graduation-cap.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
