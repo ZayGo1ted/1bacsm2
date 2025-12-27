@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, createContext, useContext, useCallback, useRef } from 'react';
 import { User, UserRole, AppState, AcademicItem, Subject, Language } from './types';
 import { supabaseService, getSupabase } from './services/supabaseService';
@@ -54,15 +53,16 @@ const App: React.FC = () => {
   const [pendingEditItem, setPendingEditItem] = useState<AcademicItem | null>(null);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
 
-  // Use a ref to current user to access latest value in async callbacks without staleness
+  // Reference for the current user to avoid stale closures in real-time callbacks
   const currentUserRef = useRef<User | null>(null);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('hub_user_session');
+    // Clear all other possible session traces
     setCurrentUser(null);
     setCurrentView('overview');
-    console.log("Session terminated.");
+    console.log("Forced Eviction: Session Cleared.");
   }, []);
 
   const syncFromCloud = async () => {
@@ -83,23 +83,22 @@ const App: React.FC = () => {
         subjects: INITIAL_SUBJECTS 
       }));
 
-      // SECURITY CHECK: If logged in, check if user still exists in database
+      // VITAL SECURITY CHECK: Verify current user still exists in database
       if (currentUserRef.current) {
         const dbMe = cloudData.users.find(u => u.id === currentUserRef.current?.id);
         
         if (!dbMe) {
-          // USER WAS KICKED/DELETED -> CLEAR LOCAL SESSION IMMEDIATELY
-          console.warn("Sync Security: Current user not found in DB. Forcing logout.");
+          // USER WAS DELETED FROM DB -> INSTANT LOGOUT
+          console.warn("Security: Your account no longer exists in the cloud database.");
           logout();
           return;
         }
 
-        // Auto-update roles if they changed in DB
+        // Keep local profile role in sync with database
         if (dbMe.role !== currentUserRef.current?.role) {
-          console.log("Sync: Updating role to", dbMe.role);
-          const updatedUser = { ...currentUserRef.current, role: dbMe.role };
-          setCurrentUser(updatedUser);
-          localStorage.setItem('hub_user_session', JSON.stringify(updatedUser));
+          const updated = { ...currentUserRef.current, role: dbMe.role };
+          setCurrentUser(updated);
+          localStorage.setItem('hub_user_session', JSON.stringify(updated));
         }
       }
 
@@ -138,13 +137,13 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Real-time Eviction and Presence Listener
+  // Real-time Eviction Listener
   useEffect(() => {
     if (!currentUser) return;
     try {
       const supabase = getSupabase();
       
-      // Presence Logic
+      // Presence tracking
       const presenceChannel = supabase.channel('classroom_presence', {
         config: { presence: { key: currentUser.id } },
       });
@@ -160,21 +159,21 @@ const App: React.FC = () => {
           }
         });
 
-      // User Table Real-time Updates (For instant kicking)
-      const userSyncChannel = supabase.channel('user_eviction')
+      // User table real-time listener (handles kicks/role updates)
+      const userEvictionChannel = supabase.channel('user_security_monitor')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, payload => {
-          const targetId = (payload.new as any)?.id || (payload.old as any)?.id;
+          const impactedId = (payload.new as any)?.id || (payload.old as any)?.id;
           
-          if (currentUserRef.current && targetId === currentUserRef.current.id) {
-            // If our user record was deleted
+          if (currentUserRef.current && impactedId === currentUserRef.current.id) {
+            // IF ACCOUNT IS DELETED
             if (payload.eventType === 'DELETE') {
-              console.warn("Real-time Eviction: Your account has been deleted by an administrator.");
+              console.warn("CRITICAL: Account deleted remotely. Evicting user.");
               logout();
-              alert("Your account has been deleted. You have been logged out.");
+              alert("Unauthorized: Your access has been revoked by an administrator.");
               return;
             }
             
-            // If our user record was updated (e.g. role change)
+            // IF ROLE OR INFO UPDATED
             if (payload.eventType === 'UPDATE') {
               const fresh = payload.new as any;
               const updatedUser = { 
@@ -187,17 +186,17 @@ const App: React.FC = () => {
             }
           }
           
-          // Refresh global state
+          // Trigger a global state refresh for all clients on any change
           syncFromCloud();
         })
         .subscribe();
 
       return () => { 
         presenceChannel.unsubscribe(); 
-        userSyncChannel.unsubscribe();
+        userEvictionChannel.unsubscribe();
       };
     } catch (e) {
-      console.warn("Real-time service error:", e);
+      console.warn("Security socket error:", e);
     }
   }, [currentUser?.id, logout]);
 
