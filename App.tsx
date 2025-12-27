@@ -63,6 +63,8 @@ const App: React.FC = () => {
 
     try {
       const cloudData = await supabaseService.fetchFullState();
+      
+      // Update global state
       setAppState(prev => ({
         ...prev,
         users: cloudData.users,
@@ -70,6 +72,17 @@ const App: React.FC = () => {
         timetable: cloudData.timetable,
         subjects: INITIAL_SUBJECTS 
       }));
+
+      // Background check: If current user's role in DB is different from state, update it
+      if (currentUser) {
+        const dbMe = cloudData.users.find(u => u.id === currentUser.id);
+        if (dbMe && dbMe.role !== currentUser.role) {
+          console.log("Background sync detected role change:", dbMe.role);
+          setCurrentUser(dbMe);
+          localStorage.setItem('hub_user_session', JSON.stringify(dbMe));
+        }
+      }
+
       setConfigError(null);
     } catch (e: any) {
       console.error("Cloud sync failure:", e);
@@ -87,6 +100,7 @@ const App: React.FC = () => {
     try {
       const { data } = await supabaseService.getUserByEmail(email);
       if (data) {
+        console.log("Profile Refreshed Successfully. New Role:", data.role);
         setCurrentUser(data);
         localStorage.setItem('hub_user_session', JSON.stringify(data));
       }
@@ -150,17 +164,19 @@ const App: React.FC = () => {
         });
 
       // 2. User Data Real-time Sync (Role changes)
-      // When any user is updated, we re-fetch our own profile if the ID matches.
+      // We listen to ALL changes on the users table.
       const userSyncChannel = supabase.channel('user_updates')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, payload => {
+          // Check if the updated record is ours
           const updatedId = (payload.new as any)?.id || (payload.old as any)?.id;
           
           if (updatedId === currentUser.id) {
-            // Re-fetch our profile to ensure we have the LATEST role from the DB
+            console.log("Real-time event detected for current user. Re-fetching profile...");
+            // RE-FETCH immediately from the database to bypass any payload limitations
             refreshCurrentProfile(currentUser.email);
           }
           
-          // Also trigger a general refresh of the class list for everyone
+          // Trigger a global state refresh so the ClassList/Admin panel updates for everyone
           syncFromCloud();
         })
         .subscribe();
@@ -229,6 +245,8 @@ const App: React.FC = () => {
     setCurrentView('overview');
   };
 
+  // Permission logic is DERIVED from currentUser. 
+  // If currentUser updates, these update, and the components re-render.
   const isDev = currentUser?.role === UserRole.DEV;
   const isAdmin = currentUser?.role === UserRole.ADMIN || isDev;
 
@@ -239,7 +257,7 @@ const App: React.FC = () => {
   const updateAppState = async (updates: Partial<AppState>) => {
     setAppState(prev => {
       const nextState = { ...prev, ...updates };
-      // Local sync if list was updated manually by this user
+      // Manual sync if this user modified themselves
       if (updates.users && currentUser) {
         const freshSelf = updates.users.find(u => u.id === currentUser.id);
         if (freshSelf && freshSelf.role !== currentUser.role) {
