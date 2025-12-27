@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.bacsm.app",
+      "sha256_cert_fingerprints": [
+        "E1:BC:1E:0B:DF:6F:3C:27:AC:75:25:F1:7D:78:AA:6C:D6:15:18:A9:A7:EA:28:24:B4:74:24:A6:5F:D3:AC:C5"
+      ]
+    }
+  }
+]
