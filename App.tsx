@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, createContext, useContext, useCallback } from 'react';
+import React, { useState, useEffect, createContext, useContext, useCallback, useRef } from 'react';
 import { User, UserRole, AppState, AcademicItem, Subject, Language } from './types';
 import { supabaseService, getSupabase } from './services/supabaseService';
 import { TRANSLATIONS, INITIAL_SUBJECTS } from './constants';
@@ -12,6 +12,7 @@ import ClassList from './components/ClassList';
 import AdminPanel from './components/AdminPanel';
 import DevTools from './components/DevTools';
 import Timetable from './components/Timetable';
+import GradeSimulator from './components/GradeSimulator';
 import Credits from './components/Credits';
 import { CloudOff, AlertTriangle, WifiOff } from 'lucide-react';
 
@@ -54,6 +55,17 @@ const App: React.FC = () => {
   const [pendingEditItem, setPendingEditItem] = useState<AcademicItem | null>(null);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
 
+  // Refs to avoid closure staleness in real-time callbacks
+  const currentUserRef = useRef<User | null>(null);
+  useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
+
+  const logout = useCallback(() => {
+    localStorage.removeItem('hub_user_session');
+    setCurrentUser(null);
+    setCurrentView('overview');
+    console.log("Session terminated.");
+  }, []);
+
   const syncFromCloud = async () => {
     if (!supabaseService.isConfigured()) {
       setConfigError("The API_KEY environment variable is not set.");
@@ -63,6 +75,7 @@ const App: React.FC = () => {
 
     try {
       const cloudData = await supabaseService.fetchFullState();
+      
       setAppState(prev => ({
         ...prev,
         users: cloudData.users,
@@ -70,6 +83,25 @@ const App: React.FC = () => {
         timetable: cloudData.timetable,
         subjects: INITIAL_SUBJECTS 
       }));
+
+      // Background validation of local session existence and roles
+      if (currentUserRef.current) {
+        const dbMe = cloudData.users.find(u => u.id === currentUserRef.current?.id);
+        
+        if (!dbMe) {
+          // USER WAS DELETED FROM DB -> FORCED LOGOUT
+          console.warn("Sync: Current user not found in database. Forcing logout.");
+          logout();
+          return;
+        }
+
+        if (dbMe.role !== currentUserRef.current?.role) {
+          console.log("Sync: Detected role mismatch, updating...", dbMe.role);
+          setCurrentUser(dbMe);
+          localStorage.setItem('hub_user_session', JSON.stringify(dbMe));
+        }
+      }
+
       setConfigError(null);
     } catch (e: any) {
       console.error("Cloud sync failure:", e);
@@ -87,13 +119,17 @@ const App: React.FC = () => {
     try {
       const { data } = await supabaseService.getUserByEmail(email);
       if (data) {
+        console.log("Profile Sync: New Role Applied -", data.role);
         setCurrentUser(data);
         localStorage.setItem('hub_user_session', JSON.stringify(data));
+      } else {
+        // If data is null, the user was likely deleted just now
+        logout();
       }
     } catch (e) {
       console.error("Failed to refresh profile", e);
     }
-  }, []);
+  }, [logout]);
 
   useEffect(() => {
     const remembered = localStorage.getItem('hub_user_session');
@@ -149,18 +185,25 @@ const App: React.FC = () => {
           }
         });
 
-      // 2. User Data Real-time Sync (Role changes)
-      // When any user is updated, we re-fetch our own profile if the ID matches.
+      // 2. Immediate Role & Existence Sync Listener
       const userSyncChannel = supabase.channel('user_updates')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, payload => {
           const updatedId = (payload.new as any)?.id || (payload.old as any)?.id;
           
-          if (updatedId === currentUser.id) {
-            // Re-fetch our profile to ensure we have the LATEST role from the DB
-            refreshCurrentProfile(currentUser.email);
+          if (currentUserRef.current && updatedId === currentUserRef.current.id) {
+            if (payload.eventType === 'DELETE') {
+              console.warn("Real-time: Your account was deleted. Logging out.");
+              logout();
+              return;
+            }
+            
+            if (payload.eventType === 'UPDATE') {
+              console.log("Real-time: Detected change to self. Re-fetching profile...");
+              refreshCurrentProfile(currentUserRef.current.email);
+            }
           }
           
-          // Also trigger a general refresh of the class list for everyone
+          // Refresh global state for everyone
           syncFromCloud();
         })
         .subscribe();
@@ -170,9 +213,9 @@ const App: React.FC = () => {
         userSyncChannel.unsubscribe();
       };
     } catch (e) {
-      console.warn("Real-time sync error:", e);
+      console.warn("Real-time engine error:", e);
     }
-  }, [currentUser?.id, currentUser?.email, refreshCurrentProfile]);
+  }, [currentUser?.id, logout, refreshCurrentProfile]);
 
   useEffect(() => {
     document.documentElement.dir = appState.language === 'ar' ? 'rtl' : 'ltr';
@@ -223,12 +266,6 @@ const App: React.FC = () => {
     }
   };
 
-  const logout = () => {
-    localStorage.removeItem('hub_user_session');
-    setCurrentUser(null);
-    setCurrentView('overview');
-  };
-
   const isDev = currentUser?.role === UserRole.DEV;
   const isAdmin = currentUser?.role === UserRole.ADMIN || isDev;
 
@@ -237,18 +274,19 @@ const App: React.FC = () => {
   };
 
   const updateAppState = async (updates: Partial<AppState>) => {
-    setAppState(prev => {
-      const nextState = { ...prev, ...updates };
-      // Local sync if list was updated manually by this user
-      if (updates.users && currentUser) {
-        const freshSelf = updates.users.find(u => u.id === currentUser.id);
-        if (freshSelf && freshSelf.role !== currentUser.role) {
-          setCurrentUser(freshSelf);
-          localStorage.setItem('hub_user_session', JSON.stringify(freshSelf));
-        }
+    setAppState(prev => ({ ...prev, ...updates }));
+    
+    // If we're updating users locally, check if we modified ourselves
+    if (updates.users && currentUser) {
+      const freshSelf = updates.users.find(u => u.id === currentUser.id);
+      if (freshSelf && freshSelf.role !== currentUser.role) {
+        setCurrentUser(freshSelf);
+        localStorage.setItem('hub_user_session', JSON.stringify(freshSelf));
+      } else if (updates.users.length < appState.users.length && !freshSelf) {
+        // Someone deleted us locally (unlikely but safe to check)
+        logout();
       }
-      return nextState;
-    });
+    }
 
     if (updates.timetable) {
       try { await supabaseService.updateTimetable(updates.timetable); } catch (e) {}
@@ -321,6 +359,7 @@ const App: React.FC = () => {
                 case 'overview': return <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
                 case 'calendar': return <CalendarView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} onEditRequest={handleCalendarEditRequest} />;
                 case 'timetable': return <Timetable entries={appState.timetable} subjects={appState.subjects} onUpdate={updateAppState} />;
+                case 'simulator': return <GradeSimulator subjects={appState.subjects} />;
                 case 'subjects': return <SubjectsView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} initialSubjectId={selectedSubjectId} clearInitialSubject={() => setSelectedSubjectId(null)} />;
                 case 'classlist': return <ClassList users={appState.users} onUpdate={updateAppState} />;
                 case 'credits': return <Credits />;
