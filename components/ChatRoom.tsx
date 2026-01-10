@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../App';
 import { supabaseService, getSupabase } from '../services/supabaseService';
@@ -6,7 +5,8 @@ import { ChatMessage, Reaction, UserRole } from '../types';
 import { 
   Send, Mic, Image as ImageIcon, Paperclip, X, 
   Smile, Play, Pause, File as FileIcon, Trash2,
-  MoreHorizontal, Plus, ShieldAlert, ShieldCheck, Maximize2
+  MoreHorizontal, Plus, ShieldAlert, ShieldCheck, Maximize2,
+  Bell, BellOff
 } from 'lucide-react';
 
 // Extensive Emoji List
@@ -29,8 +29,8 @@ const ChatRoom: React.FC = () => {
   
   // Recorder State
   const [isRecording, setIsRecording] = useState(false);
-  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
-  const [audioChunks, setAudioChunks] = useState<Blob[]>([]);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   const [recordingTime, setRecordingTime] = useState(0);
   const timerRef = useRef<number | null>(null);
   
@@ -45,6 +45,11 @@ const ChatRoom: React.FC = () => {
   const audioRefs = useRef<{[key: string]: HTMLAudioElement}>({});
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [fullImage, setFullImage] = useState<string | null>(null);
+
+  // Notification State
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => {
+    return localStorage.getItem('chat_notifications') === 'true';
+  });
 
   // Load User Cache
   useEffect(() => {
@@ -61,6 +66,26 @@ const ChatRoom: React.FC = () => {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  const toggleNotifications = async () => {
+    if (!notificationsEnabled) {
+      if ('Notification' in window) {
+        const permission = await Notification.requestPermission();
+        if (permission === 'granted') {
+          setNotificationsEnabled(true);
+          localStorage.setItem('chat_notifications', 'true');
+          new Notification("Notifications Enabled", { body: "You will now receive alerts for new messages." });
+        } else {
+          alert("Permission denied. Check browser settings.");
+        }
+      } else {
+        alert("Notifications not supported in this browser.");
+      }
+    } else {
+      setNotificationsEnabled(false);
+      localStorage.setItem('chat_notifications', 'false');
+    }
+  };
 
   // Data Fetching & Realtime Subscription
   useEffect(() => {
@@ -89,6 +114,17 @@ const ChatRoom: React.FC = () => {
           reactions: newMsg.reactions || []
         };
         setMessages(prev => [...prev, formatted]);
+
+        // Trigger Notification
+        if (notificationsEnabled && user && newMsg.user_id !== user.id) {
+           const sender = userCache.find((u: any) => u.id === newMsg.user_id)?.name || 'Someone';
+           if (document.hidden) {
+              new Notification(`New message from ${sender}`, {
+                  body: newMsg.type === 'text' ? newMsg.content : `Sent a ${newMsg.type}`,
+                  icon: '/icon.png' // Default placeholder if available
+              });
+           }
+        }
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
         const updated = payload.new as any;
@@ -102,7 +138,7 @@ const ChatRoom: React.FC = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [user, userCache, notificationsEnabled]);
 
   // Helpers
   const getUserInfo = (id: string) => {
@@ -160,11 +196,11 @@ const ChatRoom: React.FC = () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       const recorder = new MediaRecorder(stream);
-      setMediaRecorder(recorder);
-      setAudioChunks([]);
+      mediaRecorderRef.current = recorder;
+      audioChunksRef.current = [];
 
       recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) setAudioChunks(prev => [...prev, e.data]);
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
       };
 
       recorder.start();
@@ -172,52 +208,55 @@ const ChatRoom: React.FC = () => {
       setRecordingTime(0);
       timerRef.current = window.setInterval(() => setRecordingTime(t => t + 1), 1000);
     } catch (e) {
-      alert("Microphone access denied");
+      console.error(e);
+      alert("Microphone access denied or not supported.");
     }
   };
 
   const stopAndSendAudio = async () => {
-    if (!mediaRecorder) return;
+    const recorder = mediaRecorderRef.current;
+    if (!recorder) return;
+    
     setIsSending(true);
-    mediaRecorder.onstop = () => {
-       // Wait slightly for chunks to gather
-       setTimeout(async () => {
-          const blob = new Blob(audioChunks, { type: 'audio/webm' });
+    
+    // We must wait for the stop event to ensure all data is flushed
+    recorder.onstop = async () => {
+       try {
+          const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
           if (blob.size < 100) { setIsSending(false); return; }
-          try {
-              const url = await supabaseService.uploadChatMedia(blob);
-              await supabaseService.sendMessage({
-                  userId: user!.id,
-                  content: 'Voice Message',
-                  type: 'audio',
-                  mediaUrl: url
-              });
-          } catch(e) { console.error(e); }
-          setIsSending(false);
-          setAudioChunks([]);
-       }, 200);
+
+          const url = await supabaseService.uploadChatMedia(blob);
+          await supabaseService.sendMessage({
+              userId: user!.id,
+              content: 'Voice Message',
+              type: 'audio',
+              mediaUrl: url
+          });
+       } catch(e) { 
+           console.error("Audio Upload Error", e);
+           alert("Failed to send audio");
+       } finally {
+           setIsSending(false);
+           audioChunksRef.current = [];
+       }
     };
-    mediaRecorder.stop();
+    
+    recorder.stop();
+    recorder.stream.getTracks().forEach(t => t.stop());
+    
     if (timerRef.current) clearInterval(timerRef.current);
     setIsRecording(false);
   };
 
   const cancelRecording = () => {
-    if (mediaRecorder) {
-        mediaRecorder.stop();
-        mediaRecorder.stream.getTracks().forEach(t => t.stop());
+    if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop();
+        mediaRecorderRef.current.stream.getTracks().forEach(t => t.stop());
     }
     if (timerRef.current) clearInterval(timerRef.current);
     setIsRecording(false);
-    setAudioChunks([]);
+    audioChunksRef.current = [];
   };
-
-  useEffect(() => {
-    if (!mediaRecorder) return;
-    mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) setAudioChunks(prev => [...prev, e.data]);
-    }
-  }, [mediaRecorder]);
 
   // Reactions
   const toggleReaction = async (msg: ChatMessage, emoji: string) => {
@@ -252,7 +291,7 @@ const ChatRoom: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-white rounded-[2.5rem] shadow-xl border border-slate-100 overflow-hidden animate-in fade-in zoom-in-95 duration-500 relative">
+    <div className="flex flex-col h-full bg-white relative">
       
       {/* Full Image Viewer */}
       {fullImage && (
@@ -263,7 +302,7 @@ const ChatRoom: React.FC = () => {
       )}
 
       {/* Header */}
-      <div className="p-5 border-b border-slate-100 flex justify-between items-center bg-white/80 backdrop-blur-xl sticky top-0 z-20">
+      <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-white/80 backdrop-blur-xl sticky top-0 z-20 shadow-sm">
         <div>
           <h2 className="text-xl font-black text-slate-900 tracking-tight">{t('chat')}</h2>
           <div className="flex items-center gap-2 mt-0.5">
@@ -276,6 +315,13 @@ const ChatRoom: React.FC = () => {
             </p>
           </div>
         </div>
+        <button 
+          onClick={toggleNotifications} 
+          className={`p-2 rounded-xl transition-all ${notificationsEnabled ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}
+          title={notificationsEnabled ? "Notifications On" : "Notifications Off"}
+        >
+          {notificationsEnabled ? <Bell size={20} className="fill-current" /> : <BellOff size={20} />}
+        </button>
       </div>
 
       {/* Messages Area */}
