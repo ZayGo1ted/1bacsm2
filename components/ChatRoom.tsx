@@ -245,9 +245,6 @@ const ChatRoom: React.FC = () => {
     scrollToBottom();
 
     try {
-      // Simulate thinking delay for realism
-      await new Promise(resolve => setTimeout(resolve, 1500)); 
-      
       const responseText = await aiService.askZay(userQuery, user);
       
       // --- DEBUGGING & ERROR HANDLING ---
@@ -654,18 +651,19 @@ const ChatRoom: React.FC = () => {
            </div>
         )}
 
+        {/* AI Typing Indicator - Now Very Visible */}
         {isBotTyping && (
-           <div className="flex gap-3 animate-in slide-in-from-bottom-2 duration-300 items-end px-2">
+           <div className="flex gap-3 animate-in slide-in-from-bottom-2 duration-300 items-end px-2 mb-4">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 shadow-violet-200 flex items-center justify-center text-white shrink-0">
                 <Bot size={18} />
               </div>
-              <div className="bg-white px-4 py-3 rounded-2xl rounded-tl-sm border border-violet-100 shadow-sm flex items-center gap-2">
-                <span className="text-[10px] font-black text-violet-600 uppercase tracking-widest">Zay is thinking</span>
-                <div className="flex space-x-1">
-                   <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                   <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                   <span className="w-1.5 h-1.5 bg-violet-400 rounded-full animate-bounce"></span>
+              <div className="bg-white px-5 py-4 rounded-2xl rounded-tl-sm border-2 border-violet-100 shadow-lg flex items-center gap-3">
+                <div className="flex space-x-1.5">
+                   <span className="w-2 h-2 bg-violet-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                   <span className="w-2 h-2 bg-violet-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                   <span className="w-2 h-2 bg-violet-500 rounded-full animate-bounce"></span>
                 </div>
+                <span className="text-[10px] font-black text-violet-600 uppercase tracking-widest">Zay is typing...</span>
               </div>
            </div>
         )}
