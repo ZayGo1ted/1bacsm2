@@ -8,7 +8,7 @@ import {
   Send, Mic, Image as ImageIcon, Paperclip, X, 
   Smile, Play, Pause, File as FileIcon, Trash2,
   MoreHorizontal, Plus, ShieldAlert, ShieldCheck, Maximize2,
-  Bell, BellOff, Sparkles, Bot
+  Bell, BellOff, Sparkles, Bot, AlertTriangle
 } from 'lucide-react';
 
 // Extensive Emoji List
@@ -46,6 +46,10 @@ const ChatRoom: React.FC = () => {
   const lastBotTriggerRef = useRef<number>(0);
   const [isBotTyping, setIsBotTyping] = useState(false);
 
+  // Typing Indicator State
+  const [typingUsers, setTypingUsers] = useState<Set<string>>(new Set());
+  const typingTimeoutRef = useRef<{[key: string]: NodeJS.Timeout}>({});
+
   // UI State
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -73,7 +77,7 @@ const ChatRoom: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isBotTyping]);
+  }, [messages, isBotTyping, typingUsers]);
 
   const toggleNotifications = async () => {
     if (!notificationsEnabled) {
@@ -93,6 +97,53 @@ const ChatRoom: React.FC = () => {
       setNotificationsEnabled(false);
       localStorage.setItem('chat_notifications', 'false');
     }
+  };
+
+  // Realtime Broadcast for Typing
+  useEffect(() => {
+    const supabase = getSupabase();
+    const channel = supabase.channel('chat_activity');
+
+    channel
+      .on('broadcast', { event: 'typing' }, ({ payload }) => {
+        const userId = payload.userId;
+        if (userId === user?.id) return; // Ignore self
+
+        setTypingUsers(prev => {
+           const next = new Set(prev);
+           next.add(userId);
+           return next;
+        });
+
+        // Clear existing timeout for this user if any
+        if (typingTimeoutRef.current[userId]) {
+           clearTimeout(typingTimeoutRef.current[userId]);
+        }
+
+        // Remove typing indicator after 3 seconds
+        typingTimeoutRef.current[userId] = setTimeout(() => {
+           setTypingUsers(prev => {
+             const next = new Set(prev);
+             next.delete(userId);
+             return next;
+           });
+        }, 3000);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user]);
+
+  const broadcastTyping = async () => {
+    if (!user) return;
+    const supabase = getSupabase();
+    await supabase.channel('chat_activity').send({
+      type: 'broadcast',
+      event: 'typing',
+      payload: { userId: user.id }
+    });
   };
 
   // Data Fetching & Realtime Subscription
@@ -122,6 +173,13 @@ const ChatRoom: React.FC = () => {
           reactions: newMsg.reactions || []
         };
         setMessages(prev => [...prev, formatted]);
+        
+        // Remove from typing if message received
+        setTypingUsers(prev => {
+            const next = new Set(prev);
+            next.delete(newMsg.user_id);
+            return next;
+        });
 
         // Trigger Notification
         if (notificationsEnabled && user && newMsg.user_id !== user.id) {
@@ -135,7 +193,7 @@ const ChatRoom: React.FC = () => {
            if (document.hidden) {
               new Notification(`New message from ${sender}`, {
                   body: newMsg.type === 'text' ? newMsg.content : `Sent a ${newMsg.type}`,
-                  icon: '/icon.png' // Default placeholder if available
+                  icon: '/icon.png'
               });
            }
         }
@@ -179,13 +237,34 @@ const ChatRoom: React.FC = () => {
       
       const responseText = await aiService.askZay(userQuery, user);
       
+      // If response text indicates an error (starts with specific error codes or generic error from aiService)
+      if (responseText.startsWith("Error:") || responseText.includes("currently offline")) {
+         if (isDev) {
+            // Provide explicit feedback for dev
+            const errorMsg: ChatMessage = {
+                id: `err-${now}`,
+                userId: ZAY_ID,
+                content: `⚠️ DEBUG: ${responseText}`,
+                type: 'text',
+                createdAt: new Date().toISOString(),
+                reactions: []
+            };
+            setMessages(prev => [...prev, errorMsg]);
+         }
+         // Fall through to send actual message if appropriate, or stop
+         if (responseText.includes("API Key missing")) return; // Don't spam DB if key missing
+      }
+
       await supabaseService.sendMessage({
         userId: ZAY_ID,
         content: responseText,
         type: 'text'
       });
-    } catch (error) {
+    } catch (error: any) {
       console.error("Bot Trigger Error", error);
+      if (isDev) {
+          alert(`Bot Error: ${error.message}`);
+      }
     } finally {
       setIsBotTyping(false);
     }
@@ -524,6 +603,22 @@ const ChatRoom: React.FC = () => {
           );
         })}
         
+        {/* Typing Indicators */}
+        {typingUsers.size > 0 && !isBotTyping && (
+           <div className="flex gap-2 items-center px-4 animate-in fade-in">
+              <div className="flex space-x-1">
+                 <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                 <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                 <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
+              </div>
+              <span className="text-[10px] font-bold text-slate-400">
+                {typingUsers.size === 1 
+                    ? `${userCache.find(u => u.id === Array.from(typingUsers)[0])?.name || 'Someone'} is typing...` 
+                    : `${typingUsers.size} people are typing...`}
+              </span>
+           </div>
+        )}
+
         {/* Bot Typing Indicator */}
         {isBotTyping && (
            <div className="flex gap-3 animate-in slide-in-from-bottom-2 duration-300">
@@ -541,7 +636,7 @@ const ChatRoom: React.FC = () => {
       </div>
 
       {/* Input Area */}
-      <div className="p-3 md:p-4 bg-white border-t border-slate-100 relative z-30">
+      <div className="p-3 md:p-4 bg-white border-t border-slate-100 relative z-30 pb- safe-area-bottom">
         
         {/* Emoji Picker Popover */}
         {emojiPickerOpen && (
@@ -595,7 +690,7 @@ const ChatRoom: React.FC = () => {
                     <div className="flex-1 bg-slate-50 border border-slate-200 rounded-[1.25rem] flex items-center px-4 py-2.5 focus-within:border-indigo-300 focus-within:ring-4 focus-within:ring-indigo-500/10 transition-all shadow-sm">
                         <textarea 
                             value={inputText}
-                            onChange={e => setInputText(e.target.value)}
+                            onChange={e => { setInputText(e.target.value); broadcastTyping(); }}
                             placeholder={t('chat_placeholder')}
                             className="w-full bg-transparent border-none outline-none text-sm font-bold text-slate-700 resize-none max-h-24 py-1.5 hide-scrollbar"
                             rows={1}
