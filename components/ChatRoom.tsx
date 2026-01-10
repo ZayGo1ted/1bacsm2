@@ -482,12 +482,6 @@ const ChatRoom: React.FC = () => {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {/* Bot Indicator */}
-          <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-600 rounded-xl border border-violet-100">
-            <Sparkles size={14} className="fill-current animate-pulse" />
-            <span className="text-[9px] font-black uppercase tracking-widest">@Zay Active</span>
-          </div>
-
           <button 
             onClick={toggleNotifications} 
             className={`p-2 rounded-xl transition-all ${notificationsEnabled ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}
@@ -646,7 +640,6 @@ const ChatRoom: React.FC = () => {
               </div>
               <span className="text-[10px] font-bold text-slate-400">
                 {typingUsers.size === 1 
-                    // Fix: Explicitly cast Array.from result to string to avoid unknown type error
                     ? `${userCache.find((u: any) => u.id === (Array.from(typingUsers)[0] as string))?.name || 'Someone'} is typing...` 
                     : `${typingUsers.size} people are typing...`}
               </span>
