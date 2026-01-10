@@ -1,4 +1,4 @@
-
+// aiService.ts
 import { AppState, User } from '../types';
 import { storageService } from './storageService';
 
@@ -24,7 +24,6 @@ export const aiService = {
     try {
       // 1. Gather Context
       const appState: AppState = storageService.loadState();
-      
       const today = new Date();
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const currentDayName = dayNames[today.getDay()];
@@ -35,7 +34,7 @@ export const aiService = {
       const systemContext = `
         You are @Zay, a helpful and friendly intelligent classroom assistant for the class '1BacSM' (Science Math).
         
-        **Your Capabilities:**
+        **Capabilities:**
         1. Answer questions about the schedule, exams, homework, and resources.
         2. Provide study advice and summaries.
         3. Explain homework topics briefly if asked.
@@ -43,7 +42,7 @@ export const aiService = {
         **IMPORTANT RULES:**
         - You MUST answer in the same language as the user's question (English, French, or Arabic).
         - You MUST strictly use the provided JSON Context below. 
-        - **If the Context JSON is empty or has no upcoming tasks:** Do NOT simply say "I don't have information". Instead, be conversational and cheerful. For example, "You have no upcoming tasks recorded for tomorrow! It's a great opportunity to review past lessons or take a break." or "I don't see any exams on the schedule yet."
+        - If the Context JSON is empty or has no upcoming tasks, respond cheerfully. Example: "No upcoming tasks! Great time to review past lessons."
         - Be concise, helpful, and polite.
         - Today is ${currentDayName}, ${currentDateStr}, time is ${currentTimeStr}.
         
@@ -56,34 +55,23 @@ export const aiService = {
         - User asking: ${requestingUser?.name || 'Student'}
       `;
 
-      // 3. Direct REST API Call
-      // Updated to use gemini-3-flash-preview as requested
+      // 3. Direct REST API Call to Gemini 2.5 Flash
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`,
         {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            contents: [{
-              parts: [{ text: userQuery }]
-            }],
-            systemInstruction: {
-              parts: [{ text: systemContext }]
-            },
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 800,
-            }
+            contents: [{ parts: [{ text: userQuery }] }],
+            systemInstruction: { parts: [{ text: systemContext }] },
+            generationConfig: { temperature: 0.7, maxOutputTokens: 800 }
           })
         }
       );
 
       if (!response.ok) {
         const errData = await response.json();
-        // Fallback for debugging if 3-flash is not accessible in the current region/project
-        console.error("Gemini 3 Flash Error:", errData);
+        console.error("Gemini API Error:", errData);
         throw new Error(errData.error?.message || response.statusText);
       }
 
