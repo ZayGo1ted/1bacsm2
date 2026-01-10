@@ -282,6 +282,12 @@ export const supabaseService = {
     return data?.[0];
   },
 
+  deleteMessage: async (id: string) => {
+    const client = getSupabase();
+    const { error } = await client.from('messages').delete().eq('id', id);
+    if (error) throw error;
+  },
+
   uploadChatMedia: async (file: Blob | File, bucket = 'chat-attachments') => {
     const client = getSupabase();
     const ext = file instanceof File ? file.name.split('.').pop() : 'webm';
