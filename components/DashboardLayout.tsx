@@ -174,17 +174,19 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
         </div>
       </main>
 
-      <nav className="md:hidden fixed bottom-4 left-4 right-4 bg-slate-900/90 backdrop-blur-xl border border-white/10 px-6 py-3 flex justify-around items-center z-50 shadow-2xl rounded-2xl">
-        {mobileBarItems.map(item => (
-          <button 
-            key={item.id} 
-            onClick={() => setView(item.id)} 
-            className={`flex flex-col items-center justify-center w-10 h-10 transition-all ${currentView === item.id ? 'text-indigo-400 scale-125' : 'text-slate-400 hover:text-slate-200'}`}
-          >
-            {React.cloneElement(item.icon as React.ReactElement<any>, { size: 18, strokeWidth: 3, className: 'rtl-flip' })}
-          </button>
-        ))}
-      </nav>
+      {!isChat && (
+        <nav className="md:hidden fixed bottom-4 left-4 right-4 bg-slate-900/90 backdrop-blur-xl border border-white/10 px-6 py-3 flex justify-around items-center z-50 shadow-2xl rounded-2xl animate-in slide-in-from-bottom-10">
+          {mobileBarItems.map(item => (
+            <button 
+              key={item.id} 
+              onClick={() => setView(item.id)} 
+              className={`flex flex-col items-center justify-center w-10 h-10 transition-all ${currentView === item.id ? 'text-indigo-400 scale-125' : 'text-slate-400 hover:text-slate-200'}`}
+            >
+              {React.cloneElement(item.icon as React.ReactElement<any>, { size: 18, strokeWidth: 3, className: 'rtl-flip' })}
+            </button>
+          ))}
+        </nav>
+      )}
     </div>
   );
 };
