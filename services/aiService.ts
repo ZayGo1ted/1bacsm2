@@ -11,21 +11,21 @@ const getEnvVar = (key: string): string => {
   return '';
 };
 
-const API_KEY = getEnvVar('VITE_GEMINI_API_KEY') || getEnvVar('API_KEY');
-
-// Initialize Gemini Client
-const ai = new GoogleGenAI({ apiKey: API_KEY });
-
 export const aiService = {
   /**
    * Generates a response from @Zay based on classroom context.
    */
   askZay: async (userQuery: string, requestingUser: User | null): Promise<string> => {
+    const API_KEY = getEnvVar('VITE_GEMINI_API_KEY') || getEnvVar('API_KEY');
+
     if (!API_KEY) {
-      return "I'm currently offline (API Key missing). Please contact the developer to configure the VITE_GEMINI_API_KEY.";
+      return "DEBUG_ERROR: Missing API Key. Please ensure VITE_GEMINI_API_KEY is set in your Vercel/Environment variables.";
     }
 
     try {
+      // Lazy initialization to ensure we have the key and avoid module-level errors
+      const ai = new GoogleGenAI({ apiKey: API_KEY });
+
       // 1. Gather Context from Local Storage (Source of Truth)
       const appState: AppState = storageService.loadState();
       
@@ -62,20 +62,20 @@ export const aiService = {
 
       // 3. Call Gemini
       const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash-latest',
+        model: 'gemini-3-flash-preview', // Updated to valid model for basic text tasks
         contents: userQuery,
         config: {
           systemInstruction: systemContext,
-          temperature: 0.5, // Increased slightly for more natural "no data" responses
+          temperature: 0.6,
         }
       });
 
-      return response.text || "I couldn't process that request.";
+      return response.text || "I couldn't process that request (Empty response).";
 
     } catch (error: any) {
       console.error("AI Service Error:", error);
-      // Return the specific error message to help the Dev debug via chat
-      return `Error: ${error.message || "Unknown API Error"}. Please check your API Key and Model permissions.`;
+      // Return a formatted error string that ChatRoom can detect
+      return `DEBUG_ERROR: ${error.message || "Unknown API Error"}`;
     }
   }
 };
