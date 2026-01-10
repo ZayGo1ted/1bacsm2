@@ -1,4 +1,5 @@
 
+import { GoogleGenAI } from "@google/genai";
 import { AppState, User } from '../types';
 import { storageService } from './storageService';
 
@@ -12,7 +13,7 @@ const getEnvVar = (key: string): string => {
 
 export const aiService = {
   /**
-   * Generates a response from @Zay using direct REST API to avoid Vite/Rollup bundling issues.
+   * Generates a response from @Zay based on classroom context.
    */
   askZay: async (userQuery: string, requestingUser: User | null): Promise<string> => {
     const API_KEY = getEnvVar('VITE_GEMINI_API_KEY') || getEnvVar('API_KEY');
@@ -22,7 +23,10 @@ export const aiService = {
     }
 
     try {
-      // 1. Gather Context
+      // Lazy initialization to ensure we have the key and avoid module-level errors
+      const ai = new GoogleGenAI({ apiKey: API_KEY });
+
+      // 1. Gather Context from Local Storage (Source of Truth)
       const appState: AppState = storageService.loadState();
       
       const today = new Date();
@@ -31,7 +35,7 @@ export const aiService = {
       const currentDateStr = today.toISOString().split('T')[0];
       const currentTimeStr = today.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // 2. System Prompt
+      // 2. Construct System Context
       const systemContext = `
         You are @Zay, a helpful and friendly intelligent classroom assistant for the class '1BacSM' (Science Math).
         
@@ -56,45 +60,22 @@ export const aiService = {
         - User asking: ${requestingUser?.name || 'Student'}
       `;
 
-      // 3. Direct REST API Call
-      // Updated to use gemini-3-flash-preview as requested
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            contents: [{
-              parts: [{ text: userQuery }]
-            }],
-            systemInstruction: {
-              parts: [{ text: systemContext }]
-            },
-            generationConfig: {
-              temperature: 0.7,
-              maxOutputTokens: 800,
-            }
-          })
+      // 3. Call Gemini
+      const response = await ai.models.generateContent({
+        model: 'gemini-3-flash-preview', // Updated to valid model for basic text tasks
+        contents: userQuery,
+        config: {
+          systemInstruction: systemContext,
+          temperature: 0.6,
         }
-      );
+      });
 
-      if (!response.ok) {
-        const errData = await response.json();
-        // Fallback for debugging if 3-flash is not accessible in the current region/project
-        console.error("Gemini 3 Flash Error:", errData);
-        throw new Error(errData.error?.message || response.statusText);
-      }
-
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      return text || "I'm thinking, but I couldn't form a sentence right now.";
+      return response.text || "I couldn't process that request (Empty response).";
 
     } catch (error: any) {
       console.error("AI Service Error:", error);
-      return `DEBUG_ERROR: ${error.message || "Connection Failed"}`;
+      // Return a formatted error string that ChatRoom can detect
+      return `DEBUG_ERROR: ${error.message || "Unknown API Error"}`;
     }
   }
 };
