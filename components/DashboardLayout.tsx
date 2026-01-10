@@ -14,7 +14,8 @@ import {
   GraduationCap,
   Clock,
   Activity,
-  Heart
+  Heart,
+  MessageCircle
 } from 'lucide-react';
 import { APP_NAME } from '../constants';
 
@@ -30,6 +31,7 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
 
   const navItems = [
     { id: 'overview', label: t('overview'), icon: <LayoutDashboard size={16} /> },
+    { id: 'chat', label: t('chat'), icon: <MessageCircle size={16} /> },
     { id: 'calendar', label: t('calendar'), icon: <Calendar size={16} /> },
     { id: 'timetable', label: t('timetable'), icon: <Clock size={16} /> },
     { id: 'subjects', label: t('subjects'), icon: <BookOpen size={16} /> },
@@ -39,23 +41,20 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
   if (isAdmin) navItems.push({ id: 'admin', label: t('management'), icon: <ShieldAlert size={16} /> });
   if (isDev) navItems.push({ id: 'dev', label: t('dev'), icon: <Code size={16} /> });
   
-  // Credits is always available
   navItems.push({ id: 'credits', label: t('credits'), icon: <Heart size={16} /> });
 
   const isRtl = lang === 'ar';
 
-  // For the mobile bottom bar, we pick the most important 4 + Credits
   const mobileBarItems = [
     navItems.find(i => i.id === 'overview')!,
+    navItems.find(i => i.id === 'chat')!,
     navItems.find(i => i.id === 'calendar')!,
     navItems.find(i => i.id === 'timetable')!,
     navItems.find(i => i.id === 'subjects')!,
-    navItems.find(i => i.id === 'credits')!,
   ];
 
   return (
     <div className={`h-screen flex flex-col md:flex-row bg-slate-50 overflow-hidden ${isRtl ? 'font-[Tajawal,sans-serif]' : ''}`}>
-      {/* Sidebar for Desktop */}
       <aside className={`hidden md:flex flex-col w-56 bg-white h-full border-slate-200 shrink-0 shadow-xl z-20 ${isRtl ? 'border-l' : 'border-r'}`}>
         <div className="p-6 flex items-center gap-3">
           <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-100">
@@ -116,7 +115,6 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
         </div>
       </aside>
 
-      {/* Mobile Top Header */}
       <header className="md:hidden bg-white border-b border-slate-100 flex items-center justify-between p-3 sticky top-0 z-30 h-14 shrink-0 shadow-sm">
         <div className="flex items-center gap-2">
           <div className="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center text-white shadow-md">
@@ -132,7 +130,6 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
         </button>
       </header>
 
-      {/* Mobile Menu Overlay */}
       {mobileMenuOpen && (
         <div className="fixed inset-0 bg-white z-40 md:hidden pt-20 px-6 overflow-y-auto animate-in slide-in-from-top duration-300">
           <div className="space-y-2 pb-24">
@@ -169,14 +166,12 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
         </div>
       )}
 
-      {/* Main Content Area */}
       <main className="flex-1 overflow-y-auto p-4 md:p-8 relative hide-scrollbar">
-        <div className="max-w-5xl mx-auto pb-20 md:pb-0">
+        <div className="max-w-5xl mx-auto pb-20 md:pb-0 h-full">
           {children}
         </div>
       </main>
 
-      {/* Mobile Bottom Navigation Bar - includes Heart (Credits) now */}
       <nav className="md:hidden fixed bottom-4 left-4 right-4 bg-slate-900/90 backdrop-blur-xl border border-white/10 px-6 py-3 flex justify-around items-center z-50 shadow-2xl rounded-2xl">
         {mobileBarItems.map(item => (
           <button 
