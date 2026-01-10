@@ -8,7 +8,7 @@ import {
   Send, Mic, Image as ImageIcon, Paperclip, X, 
   Smile, Play, Pause, File as FileIcon, Trash2,
   MoreHorizontal, Plus, ShieldAlert, ShieldCheck, Maximize2,
-  Bell, BellOff, Sparkles, Bot, AlertTriangle, Bug, WifiOff
+  Bell, BellOff, Sparkles, Bot, AlertTriangle, Bug
 } from 'lucide-react';
 
 // Extensive Emoji List
@@ -72,10 +72,7 @@ const ChatRoom: React.FC = () => {
   }, []);
 
   const scrollToBottom = () => {
-    // Small delay to ensure DOM is updated
-    setTimeout(() => {
-      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
   useEffect(() => {
@@ -163,21 +160,19 @@ const ChatRoom: React.FC = () => {
     const channel = supabase.channel('public:messages')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         const newMsg = payload.new as any;
-        
-        // Prevent adding duplicate messages if we already added them optimistically (like AI response)
+        const formatted: ChatMessage = {
+          id: newMsg.id,
+          userId: newMsg.user_id,
+          content: newMsg.content,
+          type: newMsg.type,
+          mediaUrl: newMsg.media_url,
+          fileName: newMsg.file_name,
+          createdAt: newMsg.created_at,
+          reactions: newMsg.reactions || []
+        };
+        // Avoid duplicate local optimistic updates
         setMessages(prev => {
-          if (prev.some(m => m.id === newMsg.id)) return prev;
-          
-          const formatted: ChatMessage = {
-            id: newMsg.id,
-            userId: newMsg.user_id,
-            content: newMsg.content,
-            type: newMsg.type,
-            mediaUrl: newMsg.media_url,
-            fileName: newMsg.file_name,
-            createdAt: newMsg.created_at,
-            reactions: newMsg.reactions || []
-          };
+          if (prev.some(m => m.id === formatted.id)) return prev;
           return [...prev, formatted];
         });
         
@@ -232,54 +227,45 @@ const ChatRoom: React.FC = () => {
 
   const addLocalMessage = (msg: ChatMessage) => {
       setMessages(prev => [...prev, msg]);
-      scrollToBottom();
+      setTimeout(scrollToBottom, 100);
   };
 
   const handleBotTrigger = async (userQuery: string) => {
     const now = Date.now();
-    // 2-second cooldown to avoid double triggers
-    if (now - lastBotTriggerRef.current < 2000) return; 
+    if (now - lastBotTriggerRef.current < 5000) return; // 5s Cooldown
     lastBotTriggerRef.current = now;
 
     setIsBotTyping(true);
-    scrollToBottom();
-
     try {
+      await new Promise(resolve => setTimeout(resolve, 800)); 
+      
       const responseText = await aiService.askZay(userQuery, user);
       
-      // --- DEBUGGING & ERROR HANDLING ---
+      // Developer Debugging: Show errors inline
       if (responseText.startsWith("DEBUG_ERROR:")) {
-         setIsBotTyping(false);
-         const errorContent = isDev 
-            ? `⚠️ ${responseText}`
-            : "I'm having trouble connecting to my brain right now. Please tell the developer to check the API Key.";
-         
-         addLocalMessage({
-            id: `err-${Date.now()}`,
-            userId: ZAY_ID,
-            content: errorContent,
-            type: 'text',
-            createdAt: new Date().toISOString(),
-            reactions: []
-         });
+         if (isDev) {
+            addLocalMessage({
+                id: `err-${Date.now()}`,
+                userId: ZAY_ID,
+                content: `⚠️ ${responseText}`,
+                type: 'text',
+                createdAt: new Date().toISOString(),
+                reactions: []
+            });
+         } else {
+             // Fallback for non-devs
+             addLocalMessage({
+                id: `err-gen-${Date.now()}`,
+                userId: ZAY_ID,
+                content: "I'm having trouble connecting to my brain right now. Please try again later.",
+                type: 'text',
+                createdAt: new Date().toISOString(),
+                reactions: []
+            });
+         }
          return;
       }
 
-      // --- OPTIMISTIC UI UPDATE ---
-      // We show the message immediately even if the DB insert fails
-      const aiMessage: ChatMessage = {
-          id: `ai-${Date.now()}`, // Temporary ID
-          userId: ZAY_ID,
-          content: responseText,
-          type: 'text',
-          createdAt: new Date().toISOString(),
-          reactions: []
-      };
-      
-      setIsBotTyping(false);
-      addLocalMessage(aiMessage);
-
-      // Attempt to save to DB (Background Sync)
       try {
         await supabaseService.sendMessage({
           userId: ZAY_ID,
@@ -287,22 +273,32 @@ const ChatRoom: React.FC = () => {
           type: 'text'
         });
       } catch (dbError: any) {
-        // If DB fails (RLS), we don't alert the user because they already see the message locally
-        console.warn("AI Message persisted locally only (DB Insert Blocked by RLS):", dbError);
+        console.error("Supabase Insert Error", dbError);
+        // Fallback: Show message locally if DB insert fails (e.g. RLS issues)
+        addLocalMessage({
+            id: `local-${Date.now()}`,
+            userId: ZAY_ID,
+            content: responseText,
+            type: 'text',
+            createdAt: new Date().toISOString(),
+            reactions: []
+        });
+
         if (isDev) {
-           addLocalMessage({
-             id: `sys-${Date.now()}`,
-             userId: ZAY_ID,
-             content: "⚠️ NOTE TO DEV: The message above is local-only because the database blocked the insert (Row Level Security).",
-             type: 'text',
-             createdAt: new Date().toISOString(),
-             reactions: []
-           });
+            addLocalMessage({
+                id: `err-db-${Date.now()}`,
+                userId: ZAY_ID,
+                content: `⚠️ Database Error (Only visible to Dev): ${dbError.message || 'Permission Denied'}. showing local fallback.`,
+                type: 'text',
+                createdAt: new Date().toISOString(),
+                reactions: []
+            });
         }
       }
 
     } catch (error: any) {
-      console.error("Bot Critical Error", error);
+      console.error("Bot Trigger Error", error);
+    } finally {
       setIsBotTyping(false);
     }
   };
@@ -336,7 +332,7 @@ const ChatRoom: React.FC = () => {
       setInputText('');
       setAttachment(null);
 
-      // Trigger AI if tagged
+      // Robust check for Bot Trigger
       if (type === 'text' && messageContent.toLowerCase().includes('@zay')) {
         handleBotTrigger(messageContent);
       }
@@ -427,6 +423,7 @@ const ChatRoom: React.FC = () => {
 
   const toggleReaction = async (msg: ChatMessage, emoji: string) => {
     if (!user) return;
+    // ... reaction logic same as before ...
     const existing = msg.reactions.find(r => r.userId === user.id && r.emoji === emoji);
     let newReactions;
     if (existing) {
@@ -651,19 +648,15 @@ const ChatRoom: React.FC = () => {
            </div>
         )}
 
-        {/* AI Typing Indicator - Now Very Visible */}
         {isBotTyping && (
-           <div className="flex gap-3 animate-in slide-in-from-bottom-2 duration-300 items-end px-2 mb-4">
-              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 shadow-violet-200 flex items-center justify-center text-white shrink-0">
+           <div className="flex gap-3 animate-in slide-in-from-bottom-2 duration-300">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 shadow-violet-200 flex items-center justify-center text-white">
                 <Bot size={18} />
               </div>
-              <div className="bg-white px-5 py-4 rounded-2xl rounded-tl-sm border-2 border-violet-100 shadow-lg flex items-center gap-3">
-                <div className="flex space-x-1.5">
-                   <span className="w-2 h-2 bg-violet-500 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
-                   <span className="w-2 h-2 bg-violet-500 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
-                   <span className="w-2 h-2 bg-violet-500 rounded-full animate-bounce"></span>
-                </div>
-                <span className="text-[10px] font-black text-violet-600 uppercase tracking-widest">Zay is typing...</span>
+              <div className="bg-white px-4 py-3 rounded-2xl rounded-tl-sm border border-violet-100 shadow-sm flex items-center gap-1">
+                <span className="w-2 h-2 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-2 h-2 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"></span>
               </div>
            </div>
         )}
