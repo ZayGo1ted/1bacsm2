@@ -7,64 +7,74 @@ export const APP_NAME = "1Bacsm 2";
 
 export const INITIAL_SUBJECTS: Subject[] = [
   { 
-    id: 'history', 
-    name: { en: 'History & Geography', fr: 'Histoire-Géo', ar: 'التاريخ والجغرافيا' }, 
-    description: { en: 'World History & Maps', fr: 'Histoire Mondiale & Cartes', ar: 'التاريخ العالمي والجغرافيا' }, 
-    color: 'bg-yellow-600' 
-  },
-  { 
     id: 'math', 
     name: { en: 'Mathematics SM', fr: 'Mathématiques SM', ar: 'الرياضيات م.ر' }, 
     description: { en: 'Logic, Sets, Functions', fr: 'Logique, Ensembles, Fonctions', ar: 'المنطق، المجموعات، الدوال' }, 
-    color: 'bg-blue-600' 
+    color: 'bg-blue-600',
+    coefficient: 7
   },
   { 
     id: 'physics', 
     name: { en: 'Physics & Chemistry', fr: 'Physique-Chimie', ar: 'الفيزياء والكيمياء' }, 
     description: { en: 'Mechanics & Redox', fr: 'Mécanique & Redox', ar: 'الميكانيكا والكيمياء' }, 
-    color: 'bg-purple-600' 
+    color: 'bg-purple-600',
+    coefficient: 7
   },
   { 
     id: 'svt', 
     name: { en: 'SVT', fr: 'SVT', ar: 'علوم الحياة والأرض' }, 
     description: { en: 'Geology & Biology', fr: 'Géologie & Biologie', ar: 'الجيولوجيا والبيولوجيا' }, 
-    color: 'bg-green-600' 
-  },
-  { 
-    id: 'ar', 
-    name: { en: 'Arabic', fr: 'Arabe', ar: 'اللغة العربية' }, 
-    description: { en: 'Literature', fr: 'Littérature', ar: 'الأدب العربي' }, 
-    color: 'bg-emerald-600' 
+    color: 'bg-green-600',
+    coefficient: 2
   },
   { 
     id: 'fr', 
     name: { en: 'French', fr: 'Français', ar: 'اللغة الفرنسية' }, 
     description: { en: 'The Antigone, Le Dernier Jour', fr: 'Antigone, Le Dernier Jour', ar: 'الأدب الفرنسي' }, 
-    color: 'bg-red-600' 
+    color: 'bg-red-600',
+    coefficient: 4
+  },
+  { 
+    id: 'ar', 
+    name: { en: 'Arabic', fr: 'Arabe', ar: 'اللغة العربية' }, 
+    description: { en: 'Literature', fr: 'Littérature', ar: 'الأدب العربي' }, 
+    color: 'bg-emerald-600',
+    coefficient: 2
   },
   { 
     id: 'islamic', 
     name: { en: 'Islamic Education', fr: 'Éducation Islamique', ar: 'التربية الإسلامية' }, 
     description: { en: 'Faith and Values', fr: 'Foi et Valeurs', ar: 'العقيدة والقيم' }, 
-    color: 'bg-teal-600' 
+    color: 'bg-teal-600',
+    coefficient: 2
   },
   { 
-    id: 'phil', 
-    name: { en: 'Philosophy', fr: 'Philosophie', ar: 'الفلسفة' }, 
-    description: { en: 'Reason and Truth', fr: 'Raison et Vérité', ar: 'المجزوءات الفلسفية' }, 
-    color: 'bg-amber-600' 
+    id: 'history', 
+    name: { en: 'History & Geography', fr: 'Histoire-Géo', ar: 'التاريخ والجغرافيا' }, 
+    description: { en: 'World History & Maps', fr: 'Histoire Mondiale & Cartes', ar: 'التاريخ العالمي والجغرافيا' }, 
+    color: 'bg-yellow-600',
+    coefficient: 2
   },
   { 
     id: 'english', 
     name: { en: 'English', fr: 'Anglais', ar: 'اللغة الإنجليزية' }, 
     description: { en: 'Grammar and Vocab', fr: 'Grammaire et Vocabulaire', ar: 'اللغة الإنجليزية' }, 
-    color: 'bg-indigo-600' 
+    color: 'bg-indigo-600',
+    coefficient: 2
+  },
+  { 
+    id: 'phil', 
+    name: { en: 'Philosophy', fr: 'Philosophie', ar: 'الفلسفة' }, 
+    description: { en: 'Reason and Truth', fr: 'Raison et Vérité', ar: 'المجزوءات الفلسفية' }, 
+    color: 'bg-amber-600',
+    coefficient: 2
   },
   { 
     id: 'eps', 
     name: { en: 'Sports', fr: 'E.P.S', ar: 'التربية البدنية' }, 
     description: { en: 'Physical Activity', fr: 'Activité Physique', ar: 'الرياضة' }, 
-    color: 'bg-orange-600' 
+    color: 'bg-orange-600',
+    coefficient: 2
   }
 ];
 
@@ -94,6 +104,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     management: "Control Center",
     dev: "Dev Tools",
     credits: "Credits",
+    chat: "Group Chat",
     logout: "Exit",
     login: "Login",
     register: "Join",
@@ -127,7 +138,16 @@ export const TRANSLATIONS: Record<Language, any> = {
     placeholder_title: "Enter title...",
     placeholder_notes: "Add description...",
     upload_res: "Attach Resources",
-    time_info: "Schedule Info"
+    time_info: "Schedule Info",
+    sim_avg: "Average",
+    sim_goal: "Target Goal",
+    sim_coeff: "Coeff",
+    sim_exams: "Exams Count",
+    sim_needed: "Needed for Target",
+    chat_placeholder: "Type a message...",
+    recording: "Recording...",
+    release_send: "Release to Send",
+    tap_record: "Tap mic to record"
   },
   fr: {
     welcome: "Bienvenue",
@@ -139,6 +159,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     management: "Gestion",
     dev: "Console Dev",
     credits: "Crédits",
+    chat: "Discussion",
     logout: "Sortie",
     login: "Connexion",
     register: "Inscription",
@@ -172,7 +193,16 @@ export const TRANSLATIONS: Record<Language, any> = {
     placeholder_title: "Titre...",
     placeholder_notes: "Description...",
     upload_res: "Ajouter Ressources",
-    time_info: "Horaire"
+    time_info: "Horaire",
+    sim_avg: "Moyenne",
+    sim_goal: "Objectif",
+    sim_coeff: "Coeff",
+    sim_exams: "Nb Examens",
+    sim_needed: "Note Requise",
+    chat_placeholder: "Écrivez un message...",
+    recording: "Enregistrement...",
+    release_send: "Relâcher pour envoyer",
+    tap_record: "Appuyez pour enregistrer"
   },
   ar: {
     welcome: "مرحباً",
@@ -184,6 +214,7 @@ export const TRANSLATIONS: Record<Language, any> = {
     management: "التسيير",
     dev: "المطور",
     credits: "الاعتمادات",
+    chat: "المحادثة",
     logout: "خروج",
     login: "دخول",
     register: "انضمام",
@@ -217,6 +248,15 @@ export const TRANSLATIONS: Record<Language, any> = {
     placeholder_title: "العنوان...",
     placeholder_notes: "ملاحظات إضافية...",
     upload_res: "إرفاق موارد",
-    time_info: "معلومات الوقت"
+    time_info: "معلومات الوقت",
+    sim_avg: "المعدل",
+    sim_goal: "الهدف",
+    sim_coeff: "المعامل",
+    sim_exams: "عدد الفروض",
+    sim_needed: "النقطة المطلوبة",
+    chat_placeholder: "اكتب رسالة...",
+    recording: "جاري التسجيل...",
+    release_send: "اترك للإرسال",
+    tap_record: "اضغط للتسجيل"
   }
 };
