@@ -8,7 +8,7 @@ import {
   Send, Mic, Image as ImageIcon, Paperclip, X, 
   Smile, Play, Pause, File as FileIcon, Trash2,
   MoreHorizontal, Plus, ShieldAlert, ShieldCheck, Maximize2,
-  Bell, BellOff, Sparkles, Bot, AlertTriangle
+  Bell, BellOff, Sparkles, Bot, AlertTriangle, Bug
 } from 'lucide-react';
 
 // Extensive Emoji List
@@ -115,12 +115,10 @@ const ChatRoom: React.FC = () => {
            return next;
         });
 
-        // Clear existing timeout for this user if any
         if (typingTimeoutRef.current[userId]) {
            clearTimeout(typingTimeoutRef.current[userId]);
         }
 
-        // Remove typing indicator after 3 seconds
         typingTimeoutRef.current[userId] = setTimeout(() => {
            setTypingUsers(prev => {
              const next = new Set(prev);
@@ -172,16 +170,18 @@ const ChatRoom: React.FC = () => {
           createdAt: newMsg.created_at,
           reactions: newMsg.reactions || []
         };
-        setMessages(prev => [...prev, formatted]);
+        // Avoid duplicate local optimistic updates
+        setMessages(prev => {
+          if (prev.some(m => m.id === formatted.id)) return prev;
+          return [...prev, formatted];
+        });
         
-        // Remove from typing if message received
         setTypingUsers(prev => {
             const next = new Set(prev);
             next.delete(newMsg.user_id);
             return next;
         });
 
-        // Trigger Notification
         if (notificationsEnabled && user && newMsg.user_id !== user.id) {
            let sender = 'Someone';
            if (newMsg.user_id === ZAY_ID) {
@@ -225,6 +225,11 @@ const ChatRoom: React.FC = () => {
     return u ? u : { name: 'Unknown', role: 'STUDENT' };
   };
 
+  const addLocalMessage = (msg: ChatMessage) => {
+      setMessages(prev => [...prev, msg]);
+      setTimeout(scrollToBottom, 100);
+  };
+
   const handleBotTrigger = async (userQuery: string) => {
     const now = Date.now();
     if (now - lastBotTriggerRef.current < 5000) return; // 5s Cooldown
@@ -232,39 +237,67 @@ const ChatRoom: React.FC = () => {
 
     setIsBotTyping(true);
     try {
-      // Small artificial delay for realism
       await new Promise(resolve => setTimeout(resolve, 800)); 
       
       const responseText = await aiService.askZay(userQuery, user);
       
-      // If response text indicates an error (starts with specific error codes or generic error from aiService)
-      if (responseText.startsWith("Error:") || responseText.includes("currently offline")) {
+      // Developer Debugging: Show errors inline
+      if (responseText.startsWith("DEBUG_ERROR:")) {
          if (isDev) {
-            // Provide explicit feedback for dev
-            const errorMsg: ChatMessage = {
-                id: `err-${now}`,
+            addLocalMessage({
+                id: `err-${Date.now()}`,
                 userId: ZAY_ID,
-                content: `⚠️ DEBUG: ${responseText}`,
+                content: `⚠️ ${responseText}`,
                 type: 'text',
                 createdAt: new Date().toISOString(),
                 reactions: []
-            };
-            setMessages(prev => [...prev, errorMsg]);
+            });
+         } else {
+             // Fallback for non-devs
+             addLocalMessage({
+                id: `err-gen-${Date.now()}`,
+                userId: ZAY_ID,
+                content: "I'm having trouble connecting to my brain right now. Please try again later.",
+                type: 'text',
+                createdAt: new Date().toISOString(),
+                reactions: []
+            });
          }
-         // Fall through to send actual message if appropriate, or stop
-         if (responseText.includes("API Key missing")) return; // Don't spam DB if key missing
+         return;
       }
 
-      await supabaseService.sendMessage({
-        userId: ZAY_ID,
-        content: responseText,
-        type: 'text'
-      });
+      try {
+        await supabaseService.sendMessage({
+          userId: ZAY_ID,
+          content: responseText,
+          type: 'text'
+        });
+      } catch (dbError: any) {
+        console.error("Supabase Insert Error", dbError);
+        // Fallback: Show message locally if DB insert fails (e.g. RLS issues)
+        addLocalMessage({
+            id: `local-${Date.now()}`,
+            userId: ZAY_ID,
+            content: responseText,
+            type: 'text',
+            createdAt: new Date().toISOString(),
+            reactions: []
+        });
+
+        if (isDev) {
+            addLocalMessage({
+                id: `err-db-${Date.now()}`,
+                userId: ZAY_ID,
+                content: `⚠️ Database Error (Only visible to Dev): ${dbError.message || 'Permission Denied'}. showing local fallback.`,
+                type: 'text',
+                createdAt: new Date().toISOString(),
+                reactions: []
+            });
+        }
+      }
+
     } catch (error: any) {
       console.error("Bot Trigger Error", error);
-      if (isDev) {
-          alert(`Bot Error: ${error.message}`);
-      }
     } finally {
       setIsBotTyping(false);
     }
@@ -275,7 +308,7 @@ const ChatRoom: React.FC = () => {
     setIsSending(true);
     setEmojiPickerOpen(false);
 
-    const messageContent = inputText; // Capture current input
+    const messageContent = inputText; 
 
     try {
       let type: 'text' | 'image' | 'file' = 'text';
@@ -299,8 +332,8 @@ const ChatRoom: React.FC = () => {
       setInputText('');
       setAttachment(null);
 
-      // Check for Bot Trigger
-      if (type === 'text' && /@zay\b/i.test(messageContent)) {
+      // Robust check for Bot Trigger
+      if (type === 'text' && messageContent.toLowerCase().includes('@zay')) {
         handleBotTrigger(messageContent);
       }
 
@@ -314,11 +347,10 @@ const ChatRoom: React.FC = () => {
   const handleDeleteMessage = async (msgId: string) => {
     if (confirm("Are you sure you want to delete this message?")) {
       try {
-        // Optimistic delete
         setMessages(prev => prev.filter(m => m.id !== msgId));
         await supabaseService.deleteMessage(msgId);
       } catch (e) {
-        alert("Failed to delete");
+        // optimistic update already happened
       }
     }
   };
@@ -351,7 +383,6 @@ const ChatRoom: React.FC = () => {
     
     setIsSending(true);
     
-    // We must wait for the stop event to ensure all data is flushed
     recorder.onstop = async () => {
        try {
           const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
@@ -390,9 +421,9 @@ const ChatRoom: React.FC = () => {
     audioChunksRef.current = [];
   };
 
-  // Reactions
   const toggleReaction = async (msg: ChatMessage, emoji: string) => {
     if (!user) return;
+    // ... reaction logic same as before ...
     const existing = msg.reactions.find(r => r.userId === user.id && r.emoji === emoji);
     let newReactions;
     if (existing) {
@@ -425,7 +456,6 @@ const ChatRoom: React.FC = () => {
   return (
     <div className="flex flex-col h-full bg-white relative">
       
-      {/* Full Image Viewer */}
       {fullImage && (
         <div className="fixed inset-0 z-[100] bg-black/90 backdrop-blur-md flex items-center justify-center p-4 animate-in fade-in duration-300" onClick={() => setFullImage(null)}>
           <button onClick={() => setFullImage(null)} className="absolute top-4 right-4 text-white/70 hover:text-white"><X size={32}/></button>
@@ -472,11 +502,13 @@ const ChatRoom: React.FC = () => {
           const showAvatar = idx === 0 || messages[idx - 1].userId !== msg.userId;
           const canDelete = isMe || isDev;
           const isBot = msg.userId === ZAY_ID;
+          
+          // Debug Message Styling
+          const isDebug = msg.content.startsWith('⚠️');
 
           return (
             <div key={msg.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''} group animate-in slide-in-from-bottom-2 duration-300`}>
               
-              {/* Avatar */}
               <div className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-[10px] font-black text-white shadow-sm transition-all 
                 ${showAvatar 
                    ? (isMe ? 'bg-indigo-600 shadow-indigo-200' : isBot ? 'bg-gradient-to-tr from-violet-600 to-fuchsia-600 shadow-violet-200' : 'bg-slate-400') 
@@ -486,7 +518,6 @@ const ChatRoom: React.FC = () => {
               
               <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[80%] md:max-w-[65%]`}>
                 
-                {/* Name & Role Tag */}
                 {showAvatar && !isMe && (
                   <div className="flex items-center gap-1.5 mb-1 ml-1">
                     <span className={`text-[10px] font-black ${isBot ? 'text-violet-600' : 'text-slate-500'}`}>{userInfo.name}</span>
@@ -496,8 +527,8 @@ const ChatRoom: React.FC = () => {
                   </div>
                 )}
                 
-                {/* Message Bubble */}
                 <div className={`relative px-4 py-3 rounded-2xl text-sm font-bold shadow-sm border transition-all hover:shadow-md ${
+                  isDebug ? 'bg-rose-50 border-rose-100 text-rose-700 w-full' :
                   isMe 
                     ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-tr-sm border-transparent' 
                     : isBot 
@@ -505,7 +536,8 @@ const ChatRoom: React.FC = () => {
                       : 'bg-white text-slate-700 border-slate-100 rounded-tl-sm'
                 }`}>
                   
-                  {/* Content */}
+                  {isDebug && <div className="flex items-center gap-1 mb-1 text-[10px] uppercase font-black tracking-widest opacity-70"><Bug size={10}/> Debug Log</div>}
+
                   {msg.type === 'text' && <p className="whitespace-pre-wrap break-words leading-relaxed">{msg.content}</p>}
                   
                   {msg.type === 'image' && (
@@ -547,37 +579,35 @@ const ChatRoom: React.FC = () => {
                     </div>
                   )}
 
-                  {/* Timestamp */}
                   <span className={`text-[9px] font-black mt-1 block opacity-60 text-right ${isMe ? 'text-indigo-200' : 'text-slate-300'}`}>
                     {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                   </span>
 
-                  {/* Action Menu (Hover) */}
-                  <div className={`absolute -top-4 ${isMe ? 'left-0' : 'right-0'} opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0 z-10`}>
-                     <div className="bg-white border border-slate-200 shadow-xl rounded-full p-1 flex items-center gap-1 scale-90">
-                        {['👍', '❤️', '😂'].map(e => (
-                            <button key={e} onClick={() => toggleReaction(msg, e)} className="hover:scale-125 transition-transform p-1">{e}</button>
-                        ))}
-                        <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
-                        {canDelete && (
-                          <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors">
-                            <Trash2 size={12} />
+                  {!isDebug && (
+                    <div className={`absolute -top-4 ${isMe ? 'left-0' : 'right-0'} opacity-0 group-hover:opacity-100 transition-all duration-300 translate-y-2 group-hover:translate-y-0 z-10`}>
+                       <div className="bg-white border border-slate-200 shadow-xl rounded-full p-1 flex items-center gap-1 scale-90">
+                          {['👍', '❤️', '😂'].map(e => (
+                              <button key={e} onClick={() => toggleReaction(msg, e)} className="hover:scale-125 transition-transform p-1">{e}</button>
+                          ))}
+                          <div className="w-px h-3 bg-slate-200 mx-0.5"></div>
+                          {canDelete && (
+                            <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 text-slate-400 hover:text-rose-500 hover:bg-rose-50 rounded-full transition-colors">
+                              <Trash2 size={12} />
+                            </button>
+                          )}
+                          <button className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors relative group/more">
+                             <Plus size={12}/>
+                             <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 p-2 grid grid-cols-5 gap-1 w-48 hidden group-focus-within/more:grid group-hover/more:grid z-50 animate-in fade-in zoom-in-95">
+                                {EMOJIS.map(e => (
+                                  <button key={e} onClick={(ev) => { ev.stopPropagation(); toggleReaction(msg, e); }} className="hover:bg-slate-100 rounded p-1 text-lg transition-colors">{e}</button>
+                                ))}
+                             </div>
                           </button>
-                        )}
-                        <button className="p-1.5 text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-full transition-colors relative group/more">
-                           <Plus size={12}/>
-                           {/* Popover Emoji Picker */}
-                           <div className="absolute top-full right-0 mt-2 bg-white rounded-xl shadow-2xl border border-slate-100 p-2 grid grid-cols-5 gap-1 w-48 hidden group-focus-within/more:grid group-hover/more:grid z-50 animate-in fade-in zoom-in-95">
-                              {EMOJIS.map(e => (
-                                <button key={e} onClick={(ev) => { ev.stopPropagation(); toggleReaction(msg, e); }} className="hover:bg-slate-100 rounded p-1 text-lg transition-colors">{e}</button>
-                              ))}
-                           </div>
-                        </button>
-                     </div>
-                  </div>
+                       </div>
+                    </div>
+                  )}
                 </div>
 
-                {/* Reactions Display */}
                 {msg.reactions.length > 0 && (
                     <div className="flex flex-wrap gap-1 mt-1.5 px-1 animate-in slide-in-from-top-1">
                         {Array.from(new Set(msg.reactions.map(r => r.emoji))).map(emoji => {
@@ -603,7 +633,6 @@ const ChatRoom: React.FC = () => {
           );
         })}
         
-        {/* Typing Indicators */}
         {typingUsers.size > 0 && !isBotTyping && (
            <div className="flex gap-2 items-center px-4 animate-in fade-in">
               <div className="flex space-x-1">
@@ -619,7 +648,6 @@ const ChatRoom: React.FC = () => {
            </div>
         )}
 
-        {/* Bot Typing Indicator */}
         {isBotTyping && (
            <div className="flex gap-3 animate-in slide-in-from-bottom-2 duration-300">
               <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 shadow-violet-200 flex items-center justify-center text-white">
@@ -635,10 +663,8 @@ const ChatRoom: React.FC = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input Area */}
       <div className="p-3 md:p-4 bg-white border-t border-slate-100 relative z-30 pb- safe-area-bottom">
         
-        {/* Emoji Picker Popover */}
         {emojiPickerOpen && (
           <div className="absolute bottom-full left-4 mb-2 bg-white/90 backdrop-blur-xl border border-slate-200 shadow-2xl rounded-2xl p-3 w-72 h-64 overflow-y-auto animate-in slide-in-from-bottom-5 z-40">
              <div className="grid grid-cols-6 gap-1">
