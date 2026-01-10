@@ -1,4 +1,4 @@
-// aiService.ts
+
 import { AppState, User } from '../types';
 import { storageService } from './storageService';
 
@@ -10,9 +10,13 @@ const getEnvVar = (key: string): string => {
   return '';
 };
 
+// We prioritize 2.0 Flash as requested for better performance, with 1.5 Pro as a robust backup
+const MODELS_TO_TRY = ['gemini-2.0-flash-exp', 'gemini-1.5-pro'];
+
 export const aiService = {
   /**
    * Generates a response from @Zay using direct REST API to avoid Vite/Rollup bundling issues.
+   * Implements fallback logic to ensure a response is always generated if possible.
    */
   askZay: async (userQuery: string, requestingUser: User | null): Promise<string> => {
     const API_KEY = getEnvVar('VITE_GEMINI_API_KEY') || getEnvVar('API_KEY');
@@ -24,6 +28,7 @@ export const aiService = {
     try {
       // 1. Gather Context
       const appState: AppState = storageService.loadState();
+      
       const today = new Date();
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const currentDayName = dayNames[today.getDay()];
@@ -34,7 +39,7 @@ export const aiService = {
       const systemContext = `
         You are @Zay, a helpful and friendly intelligent classroom assistant for the class '1BacSM' (Science Math).
         
-        **Capabilities:**
+        **Your Capabilities:**
         1. Answer questions about the schedule, exams, homework, and resources.
         2. Provide study advice and summaries.
         3. Explain homework topics briefly if asked.
@@ -42,7 +47,7 @@ export const aiService = {
         **IMPORTANT RULES:**
         - You MUST answer in the same language as the user's question (English, French, or Arabic).
         - You MUST strictly use the provided JSON Context below. 
-        - If the Context JSON is empty or has no upcoming tasks, respond cheerfully. Example: "No upcoming tasks! Great time to review past lessons."
+        - **If the Context JSON is empty or has no upcoming tasks:** Do NOT simply say "I don't have information". Instead, be conversational and cheerful. For example, "You have no upcoming tasks recorded for tomorrow! It's a great opportunity to review past lessons or take a break." or "I don't see any exams on the schedule yet."
         - Be concise, helpful, and polite.
         - Today is ${currentDayName}, ${currentDateStr}, time is ${currentTimeStr}.
         
@@ -55,33 +60,61 @@ export const aiService = {
         - User asking: ${requestingUser?.name || 'Student'}
       `;
 
-      // 3. Direct REST API Call to Gemini 2.5 Flash
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${API_KEY}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: userQuery }] }],
-            systemInstruction: { parts: [{ text: systemContext }] },
-            generationConfig: { temperature: 0.7, maxOutputTokens: 800 }
-          })
-        }
-      );
+      let lastError = null;
 
-      if (!response.ok) {
-        const errData = await response.json();
-        console.error("Gemini API Error:", errData);
-        throw new Error(errData.error?.message || response.statusText);
+      // 3. Try models in sequence
+      for (const model of MODELS_TO_TRY) {
+        try {
+            console.log(`Attempting to contact AI using model: ${model}...`);
+            const response = await fetch(
+              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  contents: [{
+                    parts: [{ text: userQuery }]
+                  }],
+                  systemInstruction: {
+                    parts: [{ text: systemContext }]
+                  },
+                  generationConfig: {
+                    temperature: 0.7,
+                    maxOutputTokens: 800,
+                  }
+                })
+              }
+            );
+
+            if (!response.ok) {
+              const errData = await response.json();
+              console.warn(`Model ${model} failed:`, errData);
+              // If API Key is invalid, no point trying other models
+              if (response.status === 400 && errData.error?.status === 'INVALID_ARGUMENT' && errData.error?.message?.includes('API key')) {
+                  return "DEBUG_ERROR: Invalid API Key. Please check your configuration.";
+              }
+              throw new Error(errData.error?.message || response.statusText);
+            }
+
+            const data = await response.json();
+            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+
+            if (text) return text;
+            
+        } catch (error: any) {
+            lastError = error;
+            continue; // Try next model
+        }
       }
 
-      const data = await response.json();
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-      return text || "I'm thinking, but I couldn't form a sentence right now.";
+      // If all models fail
+      console.error("All AI models failed.", lastError);
+      return `DEBUG_ERROR: Unable to connect to Zay's brain. (${lastError?.message || "Unknown Error"})`;
 
     } catch (error: any) {
-      console.error("AI Service Error:", error);
+      console.error("AI Service Critical Error:", error);
       return `DEBUG_ERROR: ${error.message || "Connection Failed"}`;
     }
   }
