@@ -1,4 +1,4 @@
-
+// aiService.ts
 import { GoogleGenAI } from "@google/genai";
 import { AppState, User } from '../types';
 import { storageService } from './storageService';
@@ -16,65 +16,66 @@ export const aiService = {
    * Generates a response from @Zay based on classroom context.
    */
   askZay: async (userQuery: string, requestingUser: User | null): Promise<string> => {
+    // Get API key from Vercel env or fallback
     const API_KEY = getEnvVar('VITE_GEMINI_API_KEY') || getEnvVar('API_KEY');
 
     if (!API_KEY) {
-      return "DEBUG_ERROR: Missing API Key. Please ensure VITE_GEMINI_API_KEY is set in your Vercel/Environment variables.";
+      return "DEBUG_ERROR: Missing API Key. Please ensure VITE_GEMINI_API_KEY is set in your Vercel Environment Variables.";
     }
 
     try {
-      // Lazy initialization to ensure we have the key and avoid module-level errors
+      // Initialize Gemini client
       const ai = new GoogleGenAI({ apiKey: API_KEY });
 
-      // 1. Gather Context from Local Storage (Source of Truth)
+      // Load classroom state
       const appState: AppState = storageService.loadState();
-      
+
       const today = new Date();
       const dayNames = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
       const currentDayName = dayNames[today.getDay()];
       const currentDateStr = today.toISOString().split('T')[0];
       const currentTimeStr = today.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // 2. Construct System Context
+      // Construct system context
       const systemContext = `
-        You are @Zay, a helpful and friendly intelligent classroom assistant for the class '1BacSM' (Science Math).
-        
-        **Your Capabilities:**
-        1. Answer questions about the schedule, exams, homework, and resources.
-        2. Provide study advice and summaries.
-        3. Explain homework topics briefly if asked.
-        
-        **IMPORTANT RULES:**
-        - You MUST answer in the same language as the user's question (English, French, or Arabic).
-        - You MUST strictly use the provided JSON Context below. 
-        - **If the Context JSON is empty or has no upcoming tasks:** Do NOT simply say "I don't have information". Instead, be conversational and cheerful. For example, "You have no upcoming tasks recorded for tomorrow! It's a great opportunity to review past lessons or take a break." or "I don't see any exams on the schedule yet."
-        - Be concise, helpful, and polite.
-        - Today is ${currentDayName}, ${currentDateStr}, time is ${currentTimeStr}.
-        
-        **JSON Context:**
-        - Subjects: ${JSON.stringify(appState.subjects.map(s => ({ id: s.id, name: s.name })))}
-        - Academic Items (Exams/Homework): ${JSON.stringify(appState.items)}
-        - Weekly Timetable: ${JSON.stringify(appState.timetable)}
-        
-        **User Info:**
-        - User asking: ${requestingUser?.name || 'Student'}
-      `;
+You are @Zay, a helpful and friendly intelligent classroom assistant for the class '1BacSM' (Science Math).
 
-      // 3. Call Gemini
+**Capabilities:**
+1. Answer questions about the schedule, exams, homework, and resources.
+2. Provide study advice and summaries.
+3. Explain homework topics briefly if asked.
+
+**Rules:**
+- Answer in English, French, or Arabic (depending on user question).
+- Use ONLY the provided JSON Context below.
+- If there is no upcoming tasks, respond cheerfully, e.g., "No exams coming! Great time to review past lessons."
+- Be concise, helpful, and polite.
+- Today is ${currentDayName}, ${currentDateStr}, time is ${currentTimeStr}.
+
+**JSON Context:**
+- Subjects: ${JSON.stringify(appState.subjects.map(s => ({ id: s.id, name: s.name })))}
+- Academic Items (Exams/Homework): ${JSON.stringify(appState.items)}
+- Weekly Timetable: ${JSON.stringify(appState.timetable)}
+
+**User Info:**
+- User asking: ${requestingUser?.name || 'Student'}
+`;
+
+      // Call Gemini API (latest working model and format)
       const response = await ai.models.generateContent({
-        model: 'gemini-3-flash-preview', // Updated to valid model for basic text tasks
-        contents: userQuery,
+        model: 'models/gemini-2.5-flash', // ✅ valid model
+        contents: [{ text: userQuery }], // ✅ must be array of {text}
         config: {
           systemInstruction: systemContext,
           temperature: 0.6,
         }
       });
 
-      return response.text || "I couldn't process that request (Empty response).";
+      // Return generated text safely
+      return response.content?.[0]?.text || "I couldn't process that request.";
 
     } catch (error: any) {
       console.error("AI Service Error:", error);
-      // Return a formatted error string that ChatRoom can detect
       return `DEBUG_ERROR: ${error.message || "Unknown API Error"}`;
     }
   }
