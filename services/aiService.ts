@@ -56,10 +56,10 @@ export const aiService = {
         - User asking: ${requestingUser?.name || 'Student'}
       `;
 
-      // 3. Direct REST API Call (Bypasses Node SDK issues)
-      // Using gemini-1.5-flash for speed and stability
+      // 3. Direct REST API Call
+      // Updated to use gemini-3-flash-preview as requested
       const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${API_KEY}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3-flash-preview:generateContent?key=${API_KEY}`,
         {
           method: 'POST',
           headers: {
@@ -82,6 +82,8 @@ export const aiService = {
 
       if (!response.ok) {
         const errData = await response.json();
+        // Fallback for debugging if 3-flash is not accessible in the current region/project
+        console.error("Gemini 3 Flash Error:", errData);
         throw new Error(errData.error?.message || response.statusText);
       }
 
