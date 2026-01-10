@@ -290,10 +290,17 @@ export const supabaseService = {
 
   uploadChatMedia: async (file: Blob | File, bucket = 'chat-attachments') => {
     const client = getSupabase();
-    const ext = file instanceof File ? file.name.split('.').pop() : 'webm';
+    const isFile = file instanceof File;
+    const ext = isFile ? (file as File).name.split('.').pop() : 'webm';
     const fileName = `${crypto.randomUUID()}.${ext}`;
     
-    const { error } = await client.storage.from(bucket).upload(fileName, file);
+    // Explicitly set content type to ensure browser playback
+    const options = {
+        upsert: false,
+        contentType: isFile ? file.type : 'audio/webm'
+    };
+    
+    const { error } = await client.storage.from(bucket).upload(fileName, file, options);
     if (error) throw error;
     
     const { data } = client.storage.from(bucket).getPublicUrl(fileName);
