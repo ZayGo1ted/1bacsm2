@@ -2,30 +2,18 @@
 import { AppState, User } from '../types';
 import { storageService } from './storageService';
 
-const getEnvVar = (key: string): string => {
-  const metaEnv = (import.meta as any).env;
-  if (metaEnv && metaEnv[key]) return metaEnv[key];
-  if (typeof process !== 'undefined' && process.env && process.env[key]) return process.env[key];
-  if (typeof window !== 'undefined' && (window as any)[key]) return (window as any)[key];
-  return '';
-};
-
-// We prioritize 2.0 Flash as requested for better performance, with 1.5 Pro as a robust backup
-const MODELS_TO_TRY = ['gemini-2.0-flash-exp', 'gemini-1.5-pro'];
-
 export const aiService = {
   /**
-   * Generates a response from @Zay using direct REST API to avoid Vite/Rollup bundling issues.
-   * Implements fallback logic to ensure a response is always generated if possible.
+   * Generates a response from @Zay using Puter.js AI (Gemini 3 Pro Preview).
+   * This removes the need for a server-side API Key or direct Google API calls.
    */
   askZay: async (userQuery: string, requestingUser: User | null): Promise<string> => {
-    const API_KEY = getEnvVar('VITE_GEMINI_API_KEY') || getEnvVar('API_KEY');
-
-    if (!API_KEY) {
-      return "DEBUG_ERROR: Missing API Key. Please ensure VITE_GEMINI_API_KEY is set in your Vercel/Environment variables.";
-    }
-
     try {
+      // 0. Check for Puter.js
+      if (typeof (window as any).puter === 'undefined') {
+        return "DEBUG_ERROR: Puter.js library failed to load. Please check your internet connection.";
+      }
+
       // 1. Gather Context
       const appState: AppState = storageService.loadState();
       
@@ -35,7 +23,7 @@ export const aiService = {
       const currentDateStr = today.toISOString().split('T')[0];
       const currentTimeStr = today.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-      // 2. System Prompt
+      // 2. System Prompt Construction
       const systemContext = `
         You are @Zay, a helpful and friendly intelligent classroom assistant for the class '1BacSM' (Science Math).
         
@@ -60,61 +48,31 @@ export const aiService = {
         - User asking: ${requestingUser?.name || 'Student'}
       `;
 
-      let lastError = null;
+      // 3. Construct Full Prompt for Puter AI
+      // Puter.js v2 chat accepts a string prompt. We merge system instructions.
+      const fullPrompt = `${systemContext}\n\n---\n\nUser Question: ${userQuery}`;
 
-      // 3. Try models in sequence
-      for (const model of MODELS_TO_TRY) {
-        try {
-            console.log(`Attempting to contact AI using model: ${model}...`);
-            const response = await fetch(
-              `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${API_KEY}`,
-              {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({
-                  contents: [{
-                    parts: [{ text: userQuery }]
-                  }],
-                  systemInstruction: {
-                    parts: [{ text: systemContext }]
-                  },
-                  generationConfig: {
-                    temperature: 0.7,
-                    maxOutputTokens: 800,
-                  }
-                })
-              }
-            );
+      console.log("Asking Zay (via Puter Gemini 3 Pro)...");
 
-            if (!response.ok) {
-              const errData = await response.json();
-              console.warn(`Model ${model} failed:`, errData);
-              // If API Key is invalid, no point trying other models
-              if (response.status === 400 && errData.error?.status === 'INVALID_ARGUMENT' && errData.error?.message?.includes('API key')) {
-                  return "DEBUG_ERROR: Invalid API Key. Please check your configuration.";
-              }
-              throw new Error(errData.error?.message || response.statusText);
-            }
+      // 4. Call Puter AI
+      const response = await (window as any).puter.ai.chat(fullPrompt, {
+        model: 'gemini-3-pro-preview'
+      });
 
-            const data = await response.json();
-            const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-
-            if (text) return text;
-            
-        } catch (error: any) {
-            lastError = error;
-            continue; // Try next model
-        }
+      // 5. Handle Response
+      // Puter v2 usually returns the string directly or an object.
+      if (typeof response === 'string') {
+        return response;
+      } else if (response && typeof response === 'object') {
+        if (response.message?.content) return response.message.content;
+        if (response.text) return response.text;
+        return JSON.stringify(response); // Fallback debug
       }
-
-      // If all models fail
-      console.error("All AI models failed.", lastError);
-      return `DEBUG_ERROR: Unable to connect to Zay's brain. (${lastError?.message || "Unknown Error"})`;
+      
+      return "I received an empty response from the cloud.";
 
     } catch (error: any) {
-      console.error("AI Service Critical Error:", error);
+      console.error("AI Service Error:", error);
       return `DEBUG_ERROR: ${error.message || "Connection Failed"}`;
     }
   }
