@@ -22,7 +22,7 @@ export const aiService = {
    */
   askZay: async (userQuery: string, requestingUser: User | null): Promise<string> => {
     if (!API_KEY) {
-      return "I'm currently offline (API Key missing). Please contact the developer.";
+      return "I'm currently offline (API Key missing). Please contact the developer to configure the VITE_GEMINI_API_KEY.";
     }
 
     try {
@@ -37,17 +37,17 @@ export const aiService = {
 
       // 2. Construct System Context
       const systemContext = `
-        You are @Zay, an intelligent classroom assistant for the class '1BacSM' (Science Math).
+        You are @Zay, a helpful and friendly intelligent classroom assistant for the class '1BacSM' (Science Math).
         
         **Your Capabilities:**
         1. Answer questions about the schedule, exams, homework, and resources.
         2. Provide study advice and summaries.
         3. Explain homework topics briefly if asked.
         
-        **Rules:**
+        **IMPORTANT RULES:**
         - You MUST answer in the same language as the user's question (English, French, or Arabic).
-        - You MUST strictly use the provided JSON Context below. Do not invent homework or exams.
-        - If the information is not in the context, say "I don't have information about that in my records."
+        - You MUST strictly use the provided JSON Context below. 
+        - **If the Context JSON is empty or has no upcoming tasks:** Do NOT simply say "I don't have information". Instead, be conversational and cheerful. For example, "You have no upcoming tasks recorded for tomorrow! It's a great opportunity to review past lessons or take a break." or "I don't see any exams on the schedule yet."
         - Be concise, helpful, and polite.
         - Today is ${currentDayName}, ${currentDateStr}, time is ${currentTimeStr}.
         
@@ -66,15 +66,16 @@ export const aiService = {
         contents: userQuery,
         config: {
           systemInstruction: systemContext,
-          temperature: 0.3, // Low temperature for factual accuracy
+          temperature: 0.5, // Increased slightly for more natural "no data" responses
         }
       });
 
       return response.text || "I couldn't process that request.";
 
-    } catch (error) {
+    } catch (error: any) {
       console.error("AI Service Error:", error);
-      return "My brain is having a hiccup. Please try again later.";
+      // Return the specific error message to help the Dev debug via chat
+      return `Error: ${error.message || "Unknown API Error"}. Please check your API Key and Model permissions.`;
     }
   }
 };
