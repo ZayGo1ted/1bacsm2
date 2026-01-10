@@ -1,23 +1,18 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
-import { AppState, User, AcademicItem, TimetableEntry, Resource, UserRole } from '../types';
+import { AppState, User, AcademicItem, TimetableEntry, Resource, UserRole, ChatMessage, Reaction } from '../types';
 
 /**
  * Robust Environment Variable Retrieval for Vercel/Vite
- * This function looks for the keys you specifically set in Vercel:
- * VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY
  */
 const getEnvVar = (key: string): string => {
-  // 1. Check Vite's import.meta.env (Standard for your project)
   const metaEnv = (import.meta as any).env;
   if (metaEnv && metaEnv[key]) return metaEnv[key];
 
-  // 2. Check process.env (Node/Build time fallback)
   if (typeof process !== 'undefined' && process.env && process.env[key]) {
     return process.env[key];
   }
 
-  // 3. Check window fallback
   if (typeof window !== 'undefined' && (window as any)[key]) {
     return (window as any)[key];
   }
@@ -25,7 +20,6 @@ const getEnvVar = (key: string): string => {
   return '';
 };
 
-// Map your Vercel variables to the internal logic
 const SUPABASE_URL = getEnvVar('VITE_SUPABASE_URL') || 'https://lbfdweyzaqmlkcfgixmn.supabase.co';
 const API_KEY = getEnvVar('VITE_SUPABASE_ANON_KEY') || getEnvVar('API_KEY') || getEnvVar('VITE_API_KEY');
 
@@ -99,7 +93,6 @@ export const supabaseService = {
         id: entry.id,
         day: entry.day,
         startHour: entry.start_hour,
-        // Fixed: Map end_hour from database to endHour property defined in TimetableEntry type
         endHour: entry.end_hour,
         subjectId: entry.subject_id,
         color: entry.color,
@@ -207,7 +200,6 @@ export const supabaseService = {
     
     if (itemError) throw itemError;
 
-    // Refresh resources
     await client.from('resources').delete().eq('item_id', item.id);
     if (item.resources.length > 0) {
       const resourceData = item.resources.map(r => ({
@@ -249,5 +241,65 @@ export const supabaseService = {
     if (error) throw error;
     const { data: urlData } = client.storage.from('resources').getPublicUrl(`uploads/${fileName}`);
     return urlData.publicUrl;
+  },
+
+  // --- CHAT SERVICES ---
+
+  fetchMessages: async (limit = 50) => {
+    const client = getSupabase();
+    const { data, error } = await client
+      .from('messages')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(limit);
+    
+    if (error) throw error;
+    
+    return (data || []).reverse().map((m: any) => ({
+      id: m.id,
+      userId: m.user_id,
+      content: m.content,
+      type: m.type,
+      mediaUrl: m.media_url,
+      fileName: m.file_name,
+      createdAt: m.created_at,
+      reactions: m.reactions || []
+    })) as ChatMessage[];
+  },
+
+  sendMessage: async (msg: Partial<ChatMessage>) => {
+    const client = getSupabase();
+    const { data, error } = await client.from('messages').insert([{
+      content: msg.content,
+      user_id: msg.userId,
+      type: msg.type || 'text',
+      media_url: msg.mediaUrl,
+      file_name: msg.fileName,
+      reactions: []
+    }]).select();
+    
+    if (error) throw error;
+    return data?.[0];
+  },
+
+  uploadChatMedia: async (file: Blob | File, bucket = 'chat-attachments') => {
+    const client = getSupabase();
+    const ext = file instanceof File ? file.name.split('.').pop() : 'webm';
+    const fileName = `${crypto.randomUUID()}.${ext}`;
+    
+    const { error } = await client.storage.from(bucket).upload(fileName, file);
+    if (error) throw error;
+    
+    const { data } = client.storage.from(bucket).getPublicUrl(fileName);
+    return data.publicUrl;
+  },
+
+  updateReactions: async (messageId: string, reactions: Reaction[]) => {
+    const client = getSupabase();
+    const { error } = await client
+      .from('messages')
+      .update({ reactions: reactions })
+      .eq('id', messageId);
+    if (error) throw error;
   }
 };
