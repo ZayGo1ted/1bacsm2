@@ -53,6 +53,8 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
     navItems.find(i => i.id === 'subjects')!,
   ];
 
+  const isChat = currentView === 'chat';
+
   return (
     <div className={`h-screen flex flex-col md:flex-row bg-slate-50 overflow-hidden ${isRtl ? 'font-[Tajawal,sans-serif]' : ''}`}>
       <aside className={`hidden md:flex flex-col w-56 bg-white h-full border-slate-200 shrink-0 shadow-xl z-20 ${isRtl ? 'border-l' : 'border-r'}`}>
@@ -166,8 +168,8 @@ const DashboardLayout: React.FC<Props> = ({ children, currentView, setView }) =>
         </div>
       )}
 
-      <main className="flex-1 overflow-y-auto p-4 md:p-8 relative hide-scrollbar">
-        <div className="max-w-5xl mx-auto pb-20 md:pb-0 h-full">
+      <main className={`flex-1 overflow-y-auto ${isChat ? 'p-0' : 'p-4 md:p-8'} relative hide-scrollbar`}>
+        <div className={`${isChat ? 'h-full' : 'max-w-5xl mx-auto pb-20 md:pb-0 h-full'}`}>
           {children}
         </div>
       </main>
