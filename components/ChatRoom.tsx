@@ -1,12 +1,14 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../App';
 import { supabaseService, getSupabase } from '../services/supabaseService';
+import { aiService } from '../services/aiService';
 import { ChatMessage, Reaction, UserRole } from '../types';
 import { 
   Send, Mic, Image as ImageIcon, Paperclip, X, 
   Smile, Play, Pause, File as FileIcon, Trash2,
   MoreHorizontal, Plus, ShieldAlert, ShieldCheck, Maximize2,
-  Bell, BellOff
+  Bell, BellOff, Sparkles, Bot
 } from 'lucide-react';
 
 // Extensive Emoji List
@@ -17,6 +19,8 @@ const EMOJIS = [
   '🥳', '🥺', '😤', '😱', '🤫', '🤥', '👻', '👽',
   '🤖', '👾', '🎃', '😺', '🤲', '💪', '👑', '💎'
 ];
+
+const ZAY_ID = 'zay-assistant';
 
 const ChatRoom: React.FC = () => {
   const { user, t, onlineUserIds, lang, isDev } = useAuth();
@@ -38,6 +42,10 @@ const ChatRoom: React.FC = () => {
   const [attachment, setAttachment] = useState<File | null>(null);
   const [isSending, setIsSending] = useState(false);
   
+  // Bot State
+  const lastBotTriggerRef = useRef<number>(0);
+  const [isBotTyping, setIsBotTyping] = useState(false);
+
   // UI State
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -65,7 +73,7 @@ const ChatRoom: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+  }, [messages, isBotTyping]);
 
   const toggleNotifications = async () => {
     if (!notificationsEnabled) {
@@ -117,7 +125,13 @@ const ChatRoom: React.FC = () => {
 
         // Trigger Notification
         if (notificationsEnabled && user && newMsg.user_id !== user.id) {
-           const sender = userCache.find((u: any) => u.id === newMsg.user_id)?.name || 'Someone';
+           let sender = 'Someone';
+           if (newMsg.user_id === ZAY_ID) {
+             sender = '@Zay Assistant';
+           } else {
+             sender = userCache.find((u: any) => u.id === newMsg.user_id)?.name || 'Student';
+           }
+           
            if (document.hidden) {
               new Notification(`New message from ${sender}`, {
                   body: newMsg.type === 'text' ? newMsg.content : `Sent a ${newMsg.type}`,
@@ -142,14 +156,47 @@ const ChatRoom: React.FC = () => {
 
   // Helpers
   const getUserInfo = (id: string) => {
+    if (id === ZAY_ID) {
+      return { 
+        name: 'Zay', 
+        role: 'ASSISTANT', 
+        isBot: true 
+      };
+    }
     const u = userCache.find((u: any) => u.id === id);
     return u ? u : { name: 'Unknown', role: 'STUDENT' };
+  };
+
+  const handleBotTrigger = async (userQuery: string) => {
+    const now = Date.now();
+    if (now - lastBotTriggerRef.current < 5000) return; // 5s Cooldown
+    lastBotTriggerRef.current = now;
+
+    setIsBotTyping(true);
+    try {
+      // Small artificial delay for realism
+      await new Promise(resolve => setTimeout(resolve, 800)); 
+      
+      const responseText = await aiService.askZay(userQuery, user);
+      
+      await supabaseService.sendMessage({
+        userId: ZAY_ID,
+        content: responseText,
+        type: 'text'
+      });
+    } catch (error) {
+      console.error("Bot Trigger Error", error);
+    } finally {
+      setIsBotTyping(false);
+    }
   };
 
   const handleSendMessage = async () => {
     if ((!inputText.trim() && !attachment) || !user) return;
     setIsSending(true);
     setEmojiPickerOpen(false);
+
+    const messageContent = inputText; // Capture current input
 
     try {
       let type: 'text' | 'image' | 'file' = 'text';
@@ -164,7 +211,7 @@ const ChatRoom: React.FC = () => {
 
       await supabaseService.sendMessage({
         userId: user.id,
-        content: inputText,
+        content: messageContent,
         type,
         mediaUrl,
         fileName
@@ -172,6 +219,12 @@ const ChatRoom: React.FC = () => {
 
       setInputText('');
       setAttachment(null);
+
+      // Check for Bot Trigger
+      if (type === 'text' && /@zay\b/i.test(messageContent)) {
+        handleBotTrigger(messageContent);
+      }
+
     } catch (e) {
       alert("Error sending message");
     } finally {
@@ -315,13 +368,21 @@ const ChatRoom: React.FC = () => {
             </p>
           </div>
         </div>
-        <button 
-          onClick={toggleNotifications} 
-          className={`p-2 rounded-xl transition-all ${notificationsEnabled ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}
-          title={notificationsEnabled ? "Notifications On" : "Notifications Off"}
-        >
-          {notificationsEnabled ? <Bell size={20} className="fill-current" /> : <BellOff size={20} />}
-        </button>
+        <div className="flex items-center gap-2">
+          {/* Bot Indicator */}
+          <div className="hidden md:flex items-center gap-1.5 px-3 py-1.5 bg-violet-50 text-violet-600 rounded-xl border border-violet-100">
+            <Sparkles size={14} className="fill-current animate-pulse" />
+            <span className="text-[9px] font-black uppercase tracking-widest">@Zay Active</span>
+          </div>
+
+          <button 
+            onClick={toggleNotifications} 
+            className={`p-2 rounded-xl transition-all ${notificationsEnabled ? 'bg-indigo-50 text-indigo-600' : 'bg-slate-50 text-slate-400'}`}
+            title={notificationsEnabled ? "Notifications On" : "Notifications Off"}
+          >
+            {notificationsEnabled ? <Bell size={20} className="fill-current" /> : <BellOff size={20} />}
+          </button>
+        </div>
       </div>
 
       {/* Messages Area */}
@@ -331,13 +392,17 @@ const ChatRoom: React.FC = () => {
           const userInfo = getUserInfo(msg.userId);
           const showAvatar = idx === 0 || messages[idx - 1].userId !== msg.userId;
           const canDelete = isMe || isDev;
+          const isBot = msg.userId === ZAY_ID;
 
           return (
             <div key={msg.id} className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''} group animate-in slide-in-from-bottom-2 duration-300`}>
               
               {/* Avatar */}
-              <div className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-[10px] font-black text-white shadow-sm transition-all ${showAvatar ? (isMe ? 'bg-indigo-600 shadow-indigo-200' : 'bg-slate-400') : 'opacity-0'}`}>
-                {showAvatar && userInfo.name.charAt(0)}
+              <div className={`w-9 h-9 rounded-xl flex-shrink-0 flex items-center justify-center text-[10px] font-black text-white shadow-sm transition-all 
+                ${showAvatar 
+                   ? (isMe ? 'bg-indigo-600 shadow-indigo-200' : isBot ? 'bg-gradient-to-tr from-violet-600 to-fuchsia-600 shadow-violet-200' : 'bg-slate-400') 
+                   : 'opacity-0'}`}>
+                {showAvatar && (isBot ? <Bot size={18} /> : userInfo.name.charAt(0))}
               </div>
               
               <div className={`flex flex-col ${isMe ? 'items-end' : 'items-start'} max-w-[80%] md:max-w-[65%]`}>
@@ -345,9 +410,10 @@ const ChatRoom: React.FC = () => {
                 {/* Name & Role Tag */}
                 {showAvatar && !isMe && (
                   <div className="flex items-center gap-1.5 mb-1 ml-1">
-                    <span className="text-[10px] font-black text-slate-500">{userInfo.name}</span>
+                    <span className={`text-[10px] font-black ${isBot ? 'text-violet-600' : 'text-slate-500'}`}>{userInfo.name}</span>
                     {userInfo.role === UserRole.DEV && <span className="px-1.5 py-0.5 bg-slate-900 text-white text-[7px] font-black rounded-full flex items-center gap-0.5"><ShieldAlert size={6} /> DEV</span>}
                     {userInfo.role === UserRole.ADMIN && <span className="px-1.5 py-0.5 bg-indigo-500 text-white text-[7px] font-black rounded-full flex items-center gap-0.5"><ShieldCheck size={6} /> ADMIN</span>}
+                    {userInfo.isBot && <span className="px-1.5 py-0.5 bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white text-[7px] font-black rounded-full flex items-center gap-0.5"><Sparkles size={6} /> AI ASSISTANT</span>}
                   </div>
                 )}
                 
@@ -355,7 +421,9 @@ const ChatRoom: React.FC = () => {
                 <div className={`relative px-4 py-3 rounded-2xl text-sm font-bold shadow-sm border transition-all hover:shadow-md ${
                   isMe 
                     ? 'bg-gradient-to-br from-indigo-600 to-indigo-700 text-white rounded-tr-sm border-transparent' 
-                    : 'bg-white text-slate-700 border-slate-100 rounded-tl-sm'
+                    : isBot 
+                      ? 'bg-white text-slate-700 border-violet-100 shadow-violet-100 rounded-tl-sm ring-1 ring-violet-50'
+                      : 'bg-white text-slate-700 border-slate-100 rounded-tl-sm'
                 }`}>
                   
                   {/* Content */}
@@ -455,6 +523,20 @@ const ChatRoom: React.FC = () => {
             </div>
           );
         })}
+        
+        {/* Bot Typing Indicator */}
+        {isBotTyping && (
+           <div className="flex gap-3 animate-in slide-in-from-bottom-2 duration-300">
+              <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-violet-600 to-fuchsia-600 shadow-violet-200 flex items-center justify-center text-white">
+                <Bot size={18} />
+              </div>
+              <div className="bg-white px-4 py-3 rounded-2xl rounded-tl-sm border border-violet-100 shadow-sm flex items-center gap-1">
+                <span className="w-2 h-2 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.3s]"></span>
+                <span className="w-2 h-2 bg-violet-400 rounded-full animate-bounce [animation-delay:-0.15s]"></span>
+                <span className="w-2 h-2 bg-violet-400 rounded-full animate-bounce"></span>
+              </div>
+           </div>
+        )}
         <div ref={messagesEndRef} />
       </div>
 
