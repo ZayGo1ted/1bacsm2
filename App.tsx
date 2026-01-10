@@ -1,6 +1,8 @@
+
 import React, { useState, useEffect, createContext, useContext, useCallback, useRef } from 'react';
 import { User, UserRole, AppState, AcademicItem, Subject, Language } from './types';
 import { supabaseService, getSupabase } from './services/supabaseService';
+import { storageService } from './services/storageService'; 
 import { TRANSLATIONS, INITIAL_SUBJECTS } from './constants';
 import Login from './components/Login';
 import DashboardLayout from './components/DashboardLayout';
@@ -12,7 +14,8 @@ import AdminPanel from './components/AdminPanel';
 import DevTools from './components/DevTools';
 import Timetable from './components/Timetable';
 import Credits from './components/Credits';
-import { CloudOff, AlertTriangle, WifiOff } from 'lucide-react';
+import ChatRoom from './components/ChatRoom';
+import { CloudOff, AlertTriangle, WifiOff, RefreshCcw } from 'lucide-react';
 
 interface AuthContextType {
   user: User | null;
@@ -36,16 +39,18 @@ export const useAuth = () => {
 };
 
 const App: React.FC = () => {
-  const [appState, setAppState] = useState<AppState>({
-    users: [],
-    subjects: INITIAL_SUBJECTS,
-    items: [],
-    timetable: [],
-    language: 'fr'
+  // 1. Initialize State with Local Storage if available (Offline First Strategy)
+  const [appState, setAppState] = useState<AppState>(() => {
+    const local = storageService.loadState();
+    return {
+      ...local,
+      subjects: INITIAL_SUBJECTS // Always use constant subjects to ensure icons/translations work
+    };
   });
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [currentView, setCurrentView] = useState('overview');
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false); 
   const [configError, setConfigError] = useState<string | null>(null);
   const [syncWarning, setSyncWarning] = useState<boolean>(false);
   const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set());
@@ -53,48 +58,50 @@ const App: React.FC = () => {
   const [pendingEditItem, setPendingEditItem] = useState<AcademicItem | null>(null);
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null);
 
-  // Reference for the current user to avoid stale closures in real-time callbacks
   const currentUserRef = useRef<User | null>(null);
   useEffect(() => { currentUserRef.current = currentUser; }, [currentUser]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('hub_user_session');
-    // Clear all other possible session traces
     setCurrentUser(null);
     setCurrentView('overview');
     console.log("Forced Eviction: Session Cleared.");
   }, []);
 
   const syncFromCloud = async () => {
+    if (!navigator.onLine) {
+      setIsBrowserOffline(true);
+      return;
+    }
+
     if (!supabaseService.isConfigured()) {
       setConfigError("The API_KEY environment variable is not set.");
-      setIsLoading(false);
       return;
     }
 
     try {
       const cloudData = await supabaseService.fetchFullState();
       
-      setAppState(prev => ({
-        ...prev,
+      const newState = {
         users: cloudData.users,
         items: cloudData.items,
         timetable: cloudData.timetable,
-        subjects: INITIAL_SUBJECTS 
-      }));
+        subjects: INITIAL_SUBJECTS,
+        language: appState.language
+      };
 
-      // VITAL SECURITY CHECK: Verify current user still exists in database
+      setAppState(newState);
+      storageService.saveState(newState);
+
       if (currentUserRef.current) {
         const dbMe = cloudData.users.find(u => u.id === currentUserRef.current?.id);
         
         if (!dbMe) {
-          // USER WAS DELETED FROM DB -> INSTANT LOGOUT
           console.warn("Security: Your account no longer exists in the cloud database.");
           logout();
           return;
         }
 
-        // Keep local profile role in sync with database
         if (dbMe.role !== currentUserRef.current?.role) {
           const updated = { ...currentUserRef.current, role: dbMe.role };
           setCurrentUser(updated);
@@ -103,6 +110,7 @@ const App: React.FC = () => {
       }
 
       setConfigError(null);
+      setSyncWarning(false);
     } catch (e: any) {
       console.error("Cloud sync failure:", e);
       if (e.message?.includes("key") || e.message?.includes("URL")) {
@@ -110,8 +118,6 @@ const App: React.FC = () => {
       } else {
         setSyncWarning(true);
       }
-    } finally {
-      setIsLoading(false);
     }
   };
 
@@ -127,8 +133,13 @@ const App: React.FC = () => {
     }
     
     syncFromCloud();
-    const handleOnline = () => setIsBrowserOffline(false);
+
+    const handleOnline = () => { 
+      setIsBrowserOffline(false); 
+      syncFromCloud();
+    };
     const handleOffline = () => setIsBrowserOffline(true);
+    
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
     return () => {
@@ -137,13 +148,11 @@ const App: React.FC = () => {
     };
   }, []);
 
-  // Real-time Eviction Listener
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || isBrowserOffline) return;
     try {
       const supabase = getSupabase();
       
-      // Presence tracking
       const presenceChannel = supabase.channel('classroom_presence', {
         config: { presence: { key: currentUser.id } },
       });
@@ -159,34 +168,23 @@ const App: React.FC = () => {
           }
         });
 
-      // User table real-time listener (handles kicks/role updates)
       const userEvictionChannel = supabase.channel('user_security_monitor')
         .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, payload => {
           const impactedId = (payload.new as any)?.id || (payload.old as any)?.id;
           
           if (currentUserRef.current && impactedId === currentUserRef.current.id) {
-            // IF ACCOUNT IS DELETED
             if (payload.eventType === 'DELETE') {
-              console.warn("CRITICAL: Account deleted remotely. Evicting user.");
               logout();
               alert("Unauthorized: Your access has been revoked by an administrator.");
               return;
             }
-            
-            // IF ROLE OR INFO UPDATED
             if (payload.eventType === 'UPDATE') {
               const fresh = payload.new as any;
-              const updatedUser = { 
-                ...currentUserRef.current, 
-                role: fresh.role as UserRole,
-                name: fresh.name
-              };
+              const updatedUser = { ...currentUserRef.current, role: fresh.role as UserRole, name: fresh.name };
               setCurrentUser(updatedUser);
               localStorage.setItem('hub_user_session', JSON.stringify(updatedUser));
             }
           }
-          
-          // Trigger a global state refresh for all clients on any change
           syncFromCloud();
         })
         .subscribe();
@@ -198,7 +196,7 @@ const App: React.FC = () => {
     } catch (e) {
       console.warn("Security socket error:", e);
     }
-  }, [currentUser?.id, logout]);
+  }, [currentUser?.id, logout, isBrowserOffline]);
 
   useEffect(() => {
     document.documentElement.dir = appState.language === 'ar' ? 'rtl' : 'ltr';
@@ -208,6 +206,17 @@ const App: React.FC = () => {
   const t = (key: string) => TRANSLATIONS[appState.language][key] || key;
 
   const login = async (email: string, remember: boolean) => {
+    if (isBrowserOffline) {
+      const localUser = appState.users.find(u => u.email.toLowerCase() === email.toLowerCase());
+      if (localUser) {
+        setCurrentUser(localUser);
+        if (remember) localStorage.setItem('hub_user_session', JSON.stringify(localUser));
+        return true;
+      }
+      alert("Offline Mode: User not found in local cache. Connect to internet first.");
+      return false;
+    }
+
     try {
       const { data, error } = await supabaseService.getUserByEmail(email);
       if (data && !error) {
@@ -224,6 +233,10 @@ const App: React.FC = () => {
   };
 
   const register = async (name: string, email: string, remember: boolean, secret?: string) => {
+    if (isBrowserOffline) {
+      alert("Registration requires internet connection.");
+      return false;
+    }
     const role = (secret === 'otmane55') ? UserRole.DEV : UserRole.STUDENT;
     const newUser: User = {
       id: crypto.randomUUID(),
@@ -237,7 +250,10 @@ const App: React.FC = () => {
     try {
       const { error } = await supabaseService.registerUser(newUser);
       if (error) throw error;
-      setAppState(prev => ({ ...prev, users: [...prev.users, newUser] }));
+      const newUsers = [...appState.users, newUser];
+      setAppState(prev => ({ ...prev, users: newUsers }));
+      storageService.saveState({ ...appState, users: newUsers });
+      
       setCurrentUser(newUser);
       if (remember) {
         localStorage.setItem('hub_user_session', JSON.stringify(newUser));
@@ -253,12 +269,21 @@ const App: React.FC = () => {
   const isAdmin = currentUser?.role === UserRole.ADMIN || isDev;
 
   const setLang = (l: Language) => {
-    setAppState(prev => ({ ...prev, language: l }));
+    setAppState(prev => {
+      const next = { ...prev, language: l };
+      storageService.saveState(next); 
+      return next;
+    });
   };
 
   const updateAppState = async (updates: Partial<AppState>) => {
-    setAppState(prev => ({ ...prev, ...updates }));
-    if (updates.timetable) {
+    setAppState(prev => {
+      const next = { ...prev, ...updates };
+      storageService.saveState(next);
+      return next;
+    });
+
+    if (!isBrowserOffline && updates.timetable) {
       try { await supabaseService.updateTimetable(updates.timetable); } catch (e) {}
     }
   };
@@ -277,7 +302,7 @@ const App: React.FC = () => {
     user: currentUser, login, register, logout, isDev, isAdmin, t, lang: appState.language, setLang, onlineUserIds 
   };
 
-  if (configError) {
+  if (configError && !isBrowserOffline) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
         <div className="max-w-md w-full bg-white p-10 rounded-[2.5rem] shadow-2xl border border-rose-100 text-center space-y-6">
@@ -294,30 +319,19 @@ const App: React.FC = () => {
     );
   }
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="flex flex-col items-center gap-6">
-          <div className="w-16 h-16 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></div>
-          <p className="font-black text-slate-900 text-lg text-center px-4">Connecting to Hub...</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <AuthContext.Provider value={authValue}>
-      <div className="h-screen w-screen overflow-hidden bg-slate-50 relative">
+      <div className="h-screen w-screen overflow-hidden bg-slate-50 relative select-none">
         {isBrowserOffline && (
-          <div className="fixed top-0 left-0 right-0 bg-slate-900 text-white p-2 text-center text-[10px] font-black z-[100] flex items-center justify-center gap-2">
-            <WifiOff size={12} className="text-rose-500" /> OFFLINE MODE: LOCAL ACCESS ONLY
+          <div className="fixed top-0 left-0 right-0 bg-slate-800 text-white p-2 text-center text-[10px] font-black z-[100] flex items-center justify-center gap-2 shadow-xl">
+            <WifiOff size={12} className="text-rose-400" /> OFFLINE MODE - VIEWING SAVED DATA
           </div>
         )}
         {!currentUser ? (
           <>
             {syncWarning && !isBrowserOffline && (
               <div className="fixed top-0 left-0 right-0 bg-amber-500 text-white p-2 text-center text-[10px] font-black z-[100] flex items-center justify-center gap-2">
-                <AlertTriangle size={12} /> DATABASE RESTRICTED: PLEASE CONTACT DEV
+                <AlertTriangle size={12} /> SYNC ISSUE: DATA MAY BE STALE
               </div>
             )}
             <Login />
@@ -327,6 +341,7 @@ const App: React.FC = () => {
             {(() => {
               switch (currentView) {
                 case 'overview': return <Overview items={appState.items} subjects={appState.subjects} onSubjectClick={handleSubjectSelectFromOverview} />;
+                case 'chat': return <ChatRoom />;
                 case 'calendar': return <CalendarView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} onEditRequest={handleCalendarEditRequest} />;
                 case 'timetable': return <Timetable entries={appState.timetable} subjects={appState.subjects} onUpdate={updateAppState} />;
                 case 'subjects': return <SubjectsView items={appState.items} subjects={appState.subjects} onUpdate={updateAppState} initialSubjectId={selectedSubjectId} clearInitialSubject={() => setSelectedSubjectId(null)} />;
