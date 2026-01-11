@@ -327,4 +327,4 @@ export const supabaseService = {
       if (error) console.warn("Could not create AI bot user (check RLS permissions or ID validity):", error);
     }
   }
-};
+}; 
