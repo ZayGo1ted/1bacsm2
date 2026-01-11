@@ -1,6 +1,7 @@
 
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppState, User, AcademicItem, TimetableEntry, Resource, UserRole, ChatMessage, Reaction } from '../types';
+import { ZAY_USER_ID } from '../constants';
 
 /**
  * Supabase Configuration using environment variables
@@ -242,7 +243,8 @@ export const supabaseService = {
       mediaUrl: m.media_url,
       fileName: m.file_name,
       createdAt: m.created_at,
-      reactions: m.reactions || []
+      reactions: m.reactions || [],
+      readBy: m.read_by || [] // Map the new column
     })) as ChatMessage[];
   },
 
@@ -254,11 +256,24 @@ export const supabaseService = {
       type: msg.type || 'text',
       media_url: msg.mediaUrl,
       file_name: msg.fileName,
-      reactions: []
+      reactions: [],
+      read_by: [] // Initialize empty read array
     }]).select();
     
     if (error) throw error;
     return data?.[0];
+  },
+
+  markMessageRead: async (msgId: string, userId: string) => {
+    const client = getSupabase();
+    // Fetch current read_by to append securely (RPC is better but this works for simple apps)
+    const { data } = await client.from('messages').select('read_by').eq('id', msgId).single();
+    if (data) {
+       const currentReaders = data.read_by || [];
+       if (!currentReaders.includes(userId)) {
+           await client.from('messages').update({ read_by: [...currentReaders, userId] }).eq('id', msgId);
+       }
+    }
   },
 
   deleteMessage: async (id: string) => {
@@ -297,21 +312,19 @@ export const supabaseService = {
   // CRITICAL: Ensures the bot user exists in the DB so messages can be inserted successfully
   ensureBotUser: async () => {
     const client = getSupabase();
-    const botId = 'zay-assistant';
-    const { data } = await client.from('users').select('id').eq('id', botId).maybeSingle();
+    // Use the global valid UUID constant
+    const { data } = await client.from('users').select('id').eq('id', ZAY_USER_ID).maybeSingle();
     
     if (!data) {
-      // Try to create the bot user. This might fail if RLS prevents inserts to 'users',
-      // but it's a necessary attempt for the bot functionality to work properly.
       const { error } = await client.from('users').insert([{
-        id: botId,
+        id: ZAY_USER_ID,
         name: 'Zay',
         email: 'zay@classhub.ai',
         role: UserRole.ADMIN,
         student_number: 'AI-BOT-01',
         created_at: new Date().toISOString()
       }]);
-      if (error) console.warn("Could not create AI bot user (check RLS permissions):", error);
+      if (error) console.warn("Could not create AI bot user (check RLS permissions or ID validity):", error);
     }
   }
 };
