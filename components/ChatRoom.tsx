@@ -4,12 +4,13 @@ import { useAuth } from '../App';
 import { supabaseService, getSupabase } from '../services/supabaseService';
 import { aiService } from '../services/aiService';
 import { ChatMessage, Reaction, UserRole } from '../types';
+import { ZAY_USER_ID } from '../constants';
 import { 
   Send, Mic, Image as ImageIcon, Paperclip, X, 
   Smile, Play, Pause, File as FileIcon, Trash2,
   ShieldAlert, Sparkles, Bot, Reply,
   ArrowDown, Bell, BellOff, MoreVertical, Copy,
-  CornerDownLeft, MessageSquare
+  CornerDownLeft, MessageSquare, Info, Check, CheckCheck
 } from 'lucide-react';
 
 const EMOJIS = [
@@ -20,10 +21,8 @@ const EMOJIS = [
   '🤖', '👾', '🎃', '😺', '🤲', '💪', '👑', '💎'
 ];
 
-const ZAY_ID = 'zay-assistant';
-
 const ChatRoom: React.FC = () => {
-  const { user, t, onlineUserIds, lang, isDev } = useAuth();
+  const { user, t, onlineUserIds, lang, isDev, isAdmin } = useAuth();
   
   // Data State
   const [userCache, setUserCache] = useState<any[]>([]);
@@ -39,6 +38,9 @@ const ChatRoom: React.FC = () => {
   // Context Menu State
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, msg: ChatMessage } | null>(null);
   const longPressTimer = useRef<number | null>(null);
+
+  // Info Modal State (Read Receipts)
+  const [infoModalMsg, setInfoModalMsg] = useState<ChatMessage | null>(null);
 
   // Mention State
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -183,7 +185,7 @@ const ChatRoom: React.FC = () => {
     document.getElementById('chat-input')?.focus();
   };
 
-  // --- Message Subscription & Notifications ---
+  // --- Message Subscription & Notifications & Read Receipts ---
   const toggleNotifications = async () => {
     if (!notificationsEnabled) {
       if ('Notification' in window) {
@@ -206,6 +208,15 @@ const ChatRoom: React.FC = () => {
       try {
         const msgs = await supabaseService.fetchMessages(100);
         setMessages(msgs);
+        
+        // Mark fetched messages as read
+        if (user) {
+           msgs.forEach(m => {
+               if (m.userId !== user.id && (!m.readBy || !m.readBy.includes(user.id))) {
+                   supabaseService.markMessageRead(m.id, user.id);
+               }
+           });
+        }
       } catch (e) {}
     };
     loadMessages();
@@ -215,6 +226,11 @@ const ChatRoom: React.FC = () => {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, payload => {
         const newMsg = payload.new as any;
         
+        // Mark as read immediately if it's someone else's message
+        if (user && newMsg.user_id !== user.id) {
+            supabaseService.markMessageRead(newMsg.id, user.id);
+        }
+
         setMessages(prev => {
           if (prev.some(m => m.id === newMsg.id)) return prev;
           
@@ -226,7 +242,8 @@ const ChatRoom: React.FC = () => {
             mediaUrl: newMsg.media_url,
             fileName: newMsg.file_name,
             createdAt: newMsg.created_at,
-            reactions: newMsg.reactions || []
+            reactions: newMsg.reactions || [],
+            readBy: newMsg.read_by || []
           };
           return [...prev, formatted];
         });
@@ -256,7 +273,11 @@ const ChatRoom: React.FC = () => {
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' }, payload => {
         const updated = payload.new as any;
-        setMessages(prev => prev.map(m => m.id === updated.id ? { ...m, reactions: updated.reactions || [] } : m));
+        setMessages(prev => prev.map(m => m.id === updated.id ? { 
+            ...m, 
+            reactions: updated.reactions || [],
+            readBy: updated.read_by || [] 
+        } : m));
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, payload => {
         setMessages(prev => prev.filter(m => m.id !== payload.old.id));
@@ -269,7 +290,7 @@ const ChatRoom: React.FC = () => {
   }, [user, notificationsEnabled, userCache]);
 
   const getUserInfo = (id: string) => {
-    if (id === ZAY_ID) return { name: 'Zay', role: 'ASSISTANT', isBot: true };
+    if (id === ZAY_USER_ID) return { name: 'Zay', role: 'ASSISTANT', isBot: true };
     const u = userCache.find((u: any) => u.id === id);
     return u || { name: 'Student', role: 'STUDENT' };
   };
@@ -295,15 +316,13 @@ const ChatRoom: React.FC = () => {
       // 2. Send Response to DB (Visible to everyone)
       try {
         await supabaseService.sendMessage({ 
-            userId: ZAY_ID, 
+            userId: ZAY_USER_ID, 
             content: responseText, 
             type: 'text',
             createdAt: new Date().toISOString()
         });
       } catch (dbError) {
         console.error("Failed to insert AI message to DB:", dbError);
-        // Fallback: If DB insert fails (e.g. RLS), we might want to alert the user
-        // that the bot cannot reply publicly.
       }
 
     } catch (error) {
@@ -356,7 +375,7 @@ const ChatRoom: React.FC = () => {
 
       // Rule: Bot responds if explicitly mentioned via "@Zay" OR if responding to Zay directly.
       const isExplicitCall = textSent.toLowerCase().includes('@zay');
-      const isReplyToBot = repliedToMsg?.userId === ZAY_ID;
+      const isReplyToBot = repliedToMsg?.userId === ZAY_USER_ID;
 
       if (type === 'text' && (isExplicitCall || isReplyToBot)) {
         handleBotTrigger(content); // Pass full content including context
@@ -524,29 +543,71 @@ const ChatRoom: React.FC = () => {
         </div>
       )}
 
+      {/* Info Modal (Read Receipts) */}
+      {infoModalMsg && (
+        <div className="fixed inset-0 z-[100] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4" onClick={() => setInfoModalMsg(null)}>
+           <div className="bg-white w-full max-w-sm rounded-[2rem] shadow-2xl overflow-hidden animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+              <div className="bg-slate-100 p-4 border-b border-slate-200 flex justify-between items-center">
+                 <h3 className="font-black text-slate-800 flex items-center gap-2"><Info size={18}/> Message Info</h3>
+                 <button onClick={() => setInfoModalMsg(null)} className="p-1 hover:bg-slate-200 rounded-full"><X size={18}/></button>
+              </div>
+              <div className="p-4 max-h-[60vh] overflow-y-auto">
+                 <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">Read by</h4>
+                 {infoModalMsg.readBy && infoModalMsg.readBy.length > 0 ? (
+                    <div className="space-y-3">
+                       {infoModalMsg.readBy.map(readerId => {
+                          const reader = getUserInfo(readerId);
+                          return (
+                             <div key={readerId} className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-xs font-black">
+                                   {reader.name.charAt(0)}
+                                </div>
+                                <div>
+                                   <p className="text-sm font-bold text-slate-900">{reader.name}</p>
+                                   <p className="text-[10px] text-slate-500 font-bold flex items-center gap-1"><CheckCheck size={12} className="text-emerald-500"/> Read</p>
+                                </div>
+                             </div>
+                          )
+                       })}
+                    </div>
+                 ) : (
+                    <p className="text-sm font-bold text-slate-400 italic text-center py-4">No one has read this yet.</p>
+                 )}
+              </div>
+           </div>
+        </div>
+      )}
+
       {/* Context Menu */}
       {contextMenu && (
         <div 
-          className="fixed z-50 bg-white border border-slate-100 shadow-2xl rounded-2xl p-1.5 w-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150"
-          style={{ top: contextMenu.y, left: Math.min(contextMenu.x, window.innerWidth - 170) }}
+          className="fixed z-50 bg-white border border-slate-100 shadow-2xl rounded-2xl p-1.5 w-48 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150"
+          style={{ top: contextMenu.y, left: Math.min(contextMenu.x, window.innerWidth - 200) }}
           onClick={(e) => e.stopPropagation()}
         >
           <button 
             onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); document.getElementById('chat-input')?.focus(); }}
-            className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold w-full text-left"
+            className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold w-full text-left"
           >
             <Reply size={14} /> Reply
           </button>
           <button 
              onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}
-             className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold w-full text-left"
+             className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold w-full text-left"
           >
              <Copy size={14} /> Copy Text
           </button>
-          {(isDev || contextMenu.msg.userId === user?.id) && (
+          <button 
+             onClick={() => { setInfoModalMsg(contextMenu.msg); setContextMenu(null); }}
+             className="flex items-center gap-3 p-3 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold w-full text-left"
+          >
+             <Info size={14} /> Info
+          </button>
+          {/* Allow Delete if I sent it OR if I am Dev/Admin */}
+          {(isDev || isAdmin || contextMenu.msg.userId === user?.id) && (
             <button 
               onClick={() => { handleDeleteMessage(contextMenu.msg.id); setContextMenu(null); }}
-              className="flex items-center gap-3 p-2 hover:bg-rose-50 rounded-xl text-rose-500 hover:text-rose-600 transition-colors text-xs font-bold w-full text-left"
+              className="flex items-center gap-3 p-3 hover:bg-rose-50 rounded-xl text-rose-500 hover:text-rose-600 transition-colors text-xs font-bold w-full text-left border-t border-slate-50 mt-1"
             >
               <Trash2 size={14} /> Delete
             </button>
@@ -583,7 +644,7 @@ const ChatRoom: React.FC = () => {
         {messages.map((msg, idx) => {
           const isMe = msg.userId === user?.id;
           const userInfo = getUserInfo(msg.userId);
-          const isBot = msg.userId === ZAY_ID;
+          const isBot = msg.userId === ZAY_USER_ID;
           const prevMsg = messages[idx - 1];
           
           // Date Grouping
@@ -672,6 +733,16 @@ const ChatRoom: React.FC = () => {
                        <span className={`text-[9px] font-bold ${isMe ? 'text-indigo-200' : 'text-slate-400'}`}>
                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                        </span>
+                       {/* Read Indicator (Double Check) */}
+                       {isMe && (
+                           <span title={msg.readBy && msg.readBy.length > 0 ? `Read by ${msg.readBy.length}` : 'Sent'}>
+                               {msg.readBy && msg.readBy.length > 0 ? (
+                                   <CheckCheck size={10} className="text-emerald-300" />
+                               ) : (
+                                   <Check size={10} className="text-indigo-200" />
+                               )}
+                           </span>
+                       )}
                     </div>
                   </div>
 
@@ -694,14 +765,14 @@ const ChatRoom: React.FC = () => {
                           <button onClick={() => { setReplyingTo(msg); document.getElementById('chat-input')?.focus(); }} className="p-1.5 text-slate-400 hover:text-indigo-600" title="Reply">
                             <Reply size={14} />
                           </button>
-                          <button onClick={() => navigator.clipboard.writeText(msg.content)} className="p-1.5 text-slate-400 hover:text-indigo-600" title="Copy">
-                             <Copy size={14} />
-                          </button>
-                          {(isMe || isDev) && (
+                          {(isMe || isDev || isAdmin) && (
                             <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 text-slate-400 hover:text-rose-500" title="Delete">
                               <Trash2 size={14} />
                             </button>
                           )}
+                          <button onClick={() => setInfoModalMsg(msg)} className="p-1.5 text-slate-400 hover:text-indigo-600" title="Info">
+                             <Info size={14} />
+                          </button>
                        </div>
                   </div>
                 </div>
