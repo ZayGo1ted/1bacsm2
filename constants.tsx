@@ -5,6 +5,9 @@ import { UserRole, Subject, User, AcademicItem, Language } from './types';
 
 export const APP_NAME = "1Bacsm 2";
 
+// Valid UUID for the Bot User to satisfy database constraints
+export const ZAY_USER_ID = '00000000-0000-0000-0000-000000000001';
+
 export const INITIAL_SUBJECTS: Subject[] = [
   { 
     id: 'math', 
