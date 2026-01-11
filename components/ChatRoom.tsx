@@ -36,6 +36,9 @@ const ChatRoom: React.FC = () => {
   const [emojiPickerOpen, setEmojiPickerOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
 
+  // Context Menu State
+  const [contextMenu, setContextMenu] = useState<{ x: number, y: number, msg: ChatMessage } | null>(null);
+
   // Mention State
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [showMentionPopup, setShowMentionPopup] = useState(false);
@@ -73,6 +76,9 @@ const ChatRoom: React.FC = () => {
       const state = JSON.parse(localStorage.getItem('1bacsm2_state') || '{}');
       if (state.users) setUserCache(state.users);
     } catch (e) {}
+
+    // Ensure AI user exists in DB so messages don't fail FK constraint
+    supabaseService.ensureBotUser().catch(console.error);
   }, []);
 
   // --- Scroll Logic ---
@@ -334,7 +340,6 @@ const ChatRoom: React.FC = () => {
         fileName
       });
 
-      // --- LOGIC FIX: Trigger Bot Correctly ---
       const textSent = inputText;
       const repliedToMsg = replyingTo;
 
@@ -343,7 +348,6 @@ const ChatRoom: React.FC = () => {
       setReplyingTo(null);
 
       // Rule: Bot responds if explicitly mentioned via "@Zay" OR if responding to Zay directly.
-      // Bot does NOT respond if you reply to a message that merely contains "@Zay" but wasn't sent by Zay.
       const isExplicitCall = textSent.toLowerCase().includes('@zay');
       const isReplyToBot = repliedToMsg?.userId === ZAY_ID;
 
@@ -442,6 +446,11 @@ const ChatRoom: React.FC = () => {
     }
   };
 
+  const handleContextMenu = (e: React.MouseEvent, msg: ChatMessage) => {
+    e.preventDefault();
+    setContextMenu({ x: e.clientX, y: e.clientY, msg });
+  };
+
   // --- RENDER HELPERS ---
   const formatDateLabel = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -485,11 +494,40 @@ const ChatRoom: React.FC = () => {
   const typingNames = Array.from(typingUsers.values());
 
   return (
-    <div className="flex flex-col h-full bg-[#f0f2f5] relative">
+    <div className="flex flex-col h-full bg-[#f0f2f5] relative" onClick={() => setContextMenu(null)}>
       {fullImage && (
         <div className="fixed inset-0 z-[100] bg-black/95 backdrop-blur-xl flex items-center justify-center p-4" onClick={() => setFullImage(null)}>
           <button onClick={() => setFullImage(null)} className="absolute top-4 right-4 text-white/70 hover:text-white p-2 bg-white/10 rounded-full"><X size={24}/></button>
           <img src={fullImage} alt="Full" className="max-w-full max-h-[90vh] rounded-2xl shadow-2xl" onClick={e => e.stopPropagation()} />
+        </div>
+      )}
+
+      {/* Context Menu */}
+      {contextMenu && (
+        <div 
+          className="fixed z-50 bg-white border border-slate-100 shadow-2xl rounded-2xl p-1.5 w-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150"
+          style={{ top: contextMenu.y, left: Math.min(contextMenu.x, window.innerWidth - 170) }}
+        >
+          <button 
+            onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); document.getElementById('chat-input')?.focus(); }}
+            className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold"
+          >
+            <Reply size={14} /> Reply
+          </button>
+          <button 
+             onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}
+             className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold"
+          >
+             <Copy size={14} /> Copy Text
+          </button>
+          {(isDev || contextMenu.msg.userId === user?.id) && (
+            <button 
+              onClick={() => { handleDeleteMessage(contextMenu.msg.id); setContextMenu(null); }}
+              className="flex items-center gap-3 p-2 hover:bg-rose-50 rounded-xl text-rose-500 hover:text-rose-600 transition-colors text-xs font-bold"
+            >
+              <Trash2 size={14} /> Delete
+            </button>
+          )}
         </div>
       )}
 
@@ -556,7 +594,9 @@ const ChatRoom: React.FC = () => {
                     </div>
                   )}
                   
-                  <div className={`relative px-4 py-3 text-sm font-medium shadow-sm transition-all overflow-hidden
+                  <div 
+                    onContextMenu={(e) => handleContextMenu(e, msg)}
+                    className={`relative px-4 py-3 text-sm font-medium shadow-sm transition-all overflow-hidden select-text cursor-context-menu
                     ${isMe 
                       ? `bg-indigo-600 text-white ${isSequence ? 'rounded-3xl rounded-tr-md' : 'rounded-3xl rounded-tr-sm'}` 
                       : isBot 
@@ -634,7 +674,6 @@ const ChatRoom: React.FC = () => {
                        <div className="bg-white border shadow-lg rounded-full p-1 flex items-center gap-0.5 scale-90">
                           {['👍', '❤️', '😂', '😮'].map(e => <button key={e} onClick={() => toggleReaction(msg, e)} className="p-1.5 hover:scale-125 transition-transform">{e}</button>)}
                           <button onClick={() => setReplyingTo(msg)} className="p-1.5 text-slate-400 hover:text-indigo-600"><CornerDownLeft size={14} /></button>
-                          {(isMe || isDev) && <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 text-slate-400 hover:text-rose-500"><Trash2 size={14} /></button>}
                        </div>
                   </div>
                 </div>
