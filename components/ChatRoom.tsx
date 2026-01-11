@@ -312,7 +312,8 @@ const ChatRoom: React.FC = () => {
     if (replyingTo) {
       const replyUser = getUserInfo(replyingTo.userId);
       // Format: > Replying to Name: "Snippet"
-      content = `> Replying to ${replyUser.name}: "${replyingTo.content.substring(0, 40)}${replyingTo.content.length > 40 ? '...' : ''}"\n\n${content}`;
+      const snippet = replyingTo.content.length > 50 ? replyingTo.content.substring(0, 50) + '...' : replyingTo.content;
+      content = `> Replying to ${replyUser.name}: "${snippet}"\n\n${content}`;
     }
 
     try {
@@ -333,13 +334,21 @@ const ChatRoom: React.FC = () => {
         fileName
       });
 
+      // --- LOGIC FIX: Trigger Bot Correctly ---
+      const textSent = inputText;
+      const repliedToMsg = replyingTo;
+
       setInputText('');
       setAttachment(null);
       setReplyingTo(null);
 
-      // Trigger bot if mentioned
-      if (type === 'text' && content.toLowerCase().includes('@zay')) {
-        handleBotTrigger(content);
+      // Rule: Bot responds if explicitly mentioned via "@Zay" OR if responding to Zay directly.
+      // Bot does NOT respond if you reply to a message that merely contains "@Zay" but wasn't sent by Zay.
+      const isExplicitCall = textSent.toLowerCase().includes('@zay');
+      const isReplyToBot = repliedToMsg?.userId === ZAY_ID;
+
+      if (type === 'text' && (isExplicitCall || isReplyToBot)) {
+        handleBotTrigger(content); // Pass full content including context
       }
 
     } catch (e) {
