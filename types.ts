@@ -68,6 +68,7 @@ export interface ChatMessage {
   fileName?: string;
   createdAt: string;
   reactions: Reaction[];
+  readBy: string[]; // Array of User IDs who have read the message
 }
 
 export interface AppState {
