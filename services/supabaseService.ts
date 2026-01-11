@@ -3,44 +3,25 @@ import { createClient, SupabaseClient } from '@supabase/supabase-js';
 import { AppState, User, AcademicItem, TimetableEntry, Resource, UserRole, ChatMessage, Reaction } from '../types';
 
 /**
- * Robust Environment Variable Retrieval for Vercel/Vite
+ * Supabase Configuration using environment variables
  */
-const getEnvVar = (key: string): string => {
-  const metaEnv = (import.meta as any).env;
-  if (metaEnv && metaEnv[key]) return metaEnv[key];
-
-  if (typeof process !== 'undefined' && process.env && process.env[key]) {
-    return process.env[key];
-  }
-
-  if (typeof window !== 'undefined' && (window as any)[key]) {
-    return (window as any)[key];
-  }
-
-  return '';
-};
-
-const SUPABASE_URL = getEnvVar('VITE_SUPABASE_URL') || 'https://lbfdweyzaqmlkcfgixmn.supabase.co';
-const API_KEY = getEnvVar('VITE_SUPABASE_ANON_KEY') || getEnvVar('API_KEY') || getEnvVar('VITE_API_KEY');
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL || '';
+const ANON_KEY = process.env.VITE_SUPABASE_KEY || '';
 
 let supabaseInstance: SupabaseClient | null = null;
 
 export const getSupabase = () => {
-  if (!API_KEY) {
-    throw new Error("Configuration Error: VITE_SUPABASE_ANON_KEY is missing in your environment variables.");
-  }
-  if (!SUPABASE_URL) {
-    throw new Error("Configuration Error: VITE_SUPABASE_URL is missing in your environment variables.");
-  }
-  
   if (!supabaseInstance) {
-    supabaseInstance = createClient(SUPABASE_URL, API_KEY);
+    if (!SUPABASE_URL || !ANON_KEY) {
+      console.error("Supabase credentials missing. Check your environment variables.");
+    }
+    supabaseInstance = createClient(SUPABASE_URL, ANON_KEY);
   }
   return supabaseInstance;
 };
 
 export const supabaseService = {
-  isConfigured: () => API_KEY.length > 0 && SUPABASE_URL.length > 0,
+  isConfigured: () => !!(SUPABASE_URL && ANON_KEY),
 
   fetchFullState: async () => {
     const client = getSupabase();
@@ -243,8 +224,6 @@ export const supabaseService = {
     return urlData.publicUrl;
   },
 
-  // --- CHAT SERVICES ---
-
   fetchMessages: async (limit = 50) => {
     const client = getSupabase();
     const { data, error } = await client
@@ -294,7 +273,6 @@ export const supabaseService = {
     const ext = isFile ? (file as File).name.split('.').pop() : 'webm';
     const fileName = `${crypto.randomUUID()}.${ext}`;
     
-    // Explicitly set content type to ensure browser playback
     const options = {
         upsert: false,
         contentType: isFile ? file.type : 'audio/webm'
@@ -314,5 +292,26 @@ export const supabaseService = {
       .update({ reactions: reactions })
       .eq('id', messageId);
     if (error) throw error;
+  },
+
+  // CRITICAL: Ensures the bot user exists in the DB so messages can be inserted successfully
+  ensureBotUser: async () => {
+    const client = getSupabase();
+    const botId = 'zay-assistant';
+    const { data } = await client.from('users').select('id').eq('id', botId).maybeSingle();
+    
+    if (!data) {
+      // Try to create the bot user. This might fail if RLS prevents inserts to 'users',
+      // but it's a necessary attempt for the bot functionality to work properly.
+      const { error } = await client.from('users').insert([{
+        id: botId,
+        name: 'Zay',
+        email: 'zay@classhub.ai',
+        role: UserRole.ADMIN,
+        student_number: 'AI-BOT-01',
+        created_at: new Date().toISOString()
+      }]);
+      if (error) console.warn("Could not create AI bot user (check RLS permissions):", error);
+    }
   }
 };
