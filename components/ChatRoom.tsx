@@ -9,7 +9,7 @@ import {
   Smile, Play, Pause, File as FileIcon, Trash2,
   ShieldAlert, Sparkles, Bot, Reply,
   ArrowDown, Bell, BellOff, MoreVertical, Copy,
-  CornerDownLeft
+  CornerDownLeft, MessageSquare
 } from 'lucide-react';
 
 const EMOJIS = [
@@ -38,6 +38,7 @@ const ChatRoom: React.FC = () => {
 
   // Context Menu State
   const [contextMenu, setContextMenu] = useState<{ x: number, y: number, msg: ChatMessage } | null>(null);
+  const longPressTimer = useRef<number | null>(null);
 
   // Mention State
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
@@ -292,12 +293,18 @@ const ChatRoom: React.FC = () => {
       setIsBotTyping(false);
 
       // 2. Send Response to DB (Visible to everyone)
-      await supabaseService.sendMessage({ 
-          userId: ZAY_ID, 
-          content: responseText, 
-          type: 'text',
-          createdAt: new Date().toISOString()
-      });
+      try {
+        await supabaseService.sendMessage({ 
+            userId: ZAY_ID, 
+            content: responseText, 
+            type: 'text',
+            createdAt: new Date().toISOString()
+        });
+      } catch (dbError) {
+        console.error("Failed to insert AI message to DB:", dbError);
+        // Fallback: If DB insert fails (e.g. RLS), we might want to alert the user
+        // that the bot cannot reply publicly.
+      }
 
     } catch (error) {
       console.error("Bot Trigger Error:", error);
@@ -451,6 +458,21 @@ const ChatRoom: React.FC = () => {
     setContextMenu({ x: e.clientX, y: e.clientY, msg });
   };
 
+  // --- LONG PRESS FOR MOBILE ---
+  const handleTouchStart = (e: React.TouchEvent, msg: ChatMessage) => {
+    const touch = e.touches[0];
+    longPressTimer.current = window.setTimeout(() => {
+        setContextMenu({ x: touch.clientX, y: touch.clientY, msg });
+    }, 500); // 500ms for long press
+  };
+
+  const handleTouchEnd = () => {
+    if (longPressTimer.current) {
+        clearTimeout(longPressTimer.current);
+        longPressTimer.current = null;
+    }
+  };
+
   // --- RENDER HELPERS ---
   const formatDateLabel = (dateStr: string) => {
     const date = new Date(dateStr);
@@ -507,23 +529,24 @@ const ChatRoom: React.FC = () => {
         <div 
           className="fixed z-50 bg-white border border-slate-100 shadow-2xl rounded-2xl p-1.5 w-40 flex flex-col gap-1 animate-in fade-in zoom-in-95 duration-150"
           style={{ top: contextMenu.y, left: Math.min(contextMenu.x, window.innerWidth - 170) }}
+          onClick={(e) => e.stopPropagation()}
         >
           <button 
             onClick={() => { setReplyingTo(contextMenu.msg); setContextMenu(null); document.getElementById('chat-input')?.focus(); }}
-            className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold"
+            className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold w-full text-left"
           >
             <Reply size={14} /> Reply
           </button>
           <button 
              onClick={() => { navigator.clipboard.writeText(contextMenu.msg.content); setContextMenu(null); }}
-             className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold"
+             className="flex items-center gap-3 p-2 hover:bg-slate-50 rounded-xl text-slate-600 hover:text-indigo-600 transition-colors text-xs font-bold w-full text-left"
           >
              <Copy size={14} /> Copy Text
           </button>
           {(isDev || contextMenu.msg.userId === user?.id) && (
             <button 
               onClick={() => { handleDeleteMessage(contextMenu.msg.id); setContextMenu(null); }}
-              className="flex items-center gap-3 p-2 hover:bg-rose-50 rounded-xl text-rose-500 hover:text-rose-600 transition-colors text-xs font-bold"
+              className="flex items-center gap-3 p-2 hover:bg-rose-50 rounded-xl text-rose-500 hover:text-rose-600 transition-colors text-xs font-bold w-full text-left"
             >
               <Trash2 size={14} /> Delete
             </button>
@@ -580,7 +603,7 @@ const ChatRoom: React.FC = () => {
                 </div>
               )}
 
-              <div className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''} group ${isSequence ? 'mt-1' : 'mt-4'} animate-in slide-in-from-bottom-2 duration-300`}>
+              <div className={`flex gap-3 ${isMe ? 'flex-row-reverse' : ''} group ${isSequence ? 'mt-1' : 'mt-4'} animate-in slide-in-from-bottom-2 duration-300 relative`}>
                 <div className={`w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center text-[10px] font-black text-white shadow-sm transition-all ${!isSequence ? (isMe ? 'bg-indigo-600' : isBot ? 'bg-gradient-to-tr from-violet-600 to-fuchsia-600' : 'bg-slate-400') : 'opacity-0'}`}>
                   {!isSequence && (isBot ? <Bot size={16} /> : userInfo.name.charAt(0))}
                 </div>
@@ -596,6 +619,8 @@ const ChatRoom: React.FC = () => {
                   
                   <div 
                     onContextMenu={(e) => handleContextMenu(e, msg)}
+                    onTouchStart={(e) => handleTouchStart(e, msg)}
+                    onTouchEnd={handleTouchEnd}
                     className={`relative px-4 py-3 text-sm font-medium shadow-sm transition-all overflow-hidden select-text cursor-context-menu
                     ${isMe 
                       ? `bg-indigo-600 text-white ${isSequence ? 'rounded-3xl rounded-tr-md' : 'rounded-3xl rounded-tr-sm'}` 
@@ -648,15 +673,6 @@ const ChatRoom: React.FC = () => {
                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                        </span>
                     </div>
-
-                    {/* Quick Reply on Hover */}
-                    <button 
-                        onClick={() => { setReplyingTo(msg); document.getElementById('chat-input')?.focus(); }}
-                        className={`absolute top-1/2 -translate-y-1/2 ${isMe ? '-left-8' : '-right-8'} p-2 text-slate-400 hover:text-indigo-600 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all z-10 md:flex hidden`}
-                        title="Reply"
-                    >
-                        <CornerDownLeft size={14} />
-                    </button>
                   </div>
 
                   {msg.reactions.length > 0 && (
@@ -669,11 +685,23 @@ const ChatRoom: React.FC = () => {
                       </div>
                   )}
 
-                  {/* Reaction Picker & Reply (Mobile Friendly) */}
-                  <div className={`absolute -top-8 ${isMe ? 'right-0' : 'left-0'} opacity-0 group-hover:opacity-100 transition-all z-10 pointer-events-none group-hover:pointer-events-auto`}>
-                       <div className="bg-white border shadow-lg rounded-full p-1 flex items-center gap-0.5 scale-90">
-                          {['👍', '❤️', '😂', '😮'].map(e => <button key={e} onClick={() => toggleReaction(msg, e)} className="p-1.5 hover:scale-125 transition-transform">{e}</button>)}
-                          <button onClick={() => setReplyingTo(msg)} className="p-1.5 text-slate-400 hover:text-indigo-600"><CornerDownLeft size={14} /></button>
+                  {/* Reaction Picker & Actions (Mobile Friendly) */}
+                  <div className={`absolute -top-10 ${isMe ? 'right-0' : 'left-0'} opacity-0 group-hover:opacity-100 transition-all z-10 pointer-events-none group-hover:pointer-events-auto flex items-center gap-2`}>
+                       {/* Floating Action Bar (Hover) */}
+                       <div className="bg-white border shadow-lg rounded-full p-1 flex items-center gap-1 scale-90">
+                          {['👍', '❤️', '😂'].map(e => <button key={e} onClick={() => toggleReaction(msg, e)} className="p-1.5 hover:scale-125 transition-transform">{e}</button>)}
+                          <div className="w-px h-3 bg-slate-200 mx-1"></div>
+                          <button onClick={() => { setReplyingTo(msg); document.getElementById('chat-input')?.focus(); }} className="p-1.5 text-slate-400 hover:text-indigo-600" title="Reply">
+                            <Reply size={14} />
+                          </button>
+                          <button onClick={() => navigator.clipboard.writeText(msg.content)} className="p-1.5 text-slate-400 hover:text-indigo-600" title="Copy">
+                             <Copy size={14} />
+                          </button>
+                          {(isMe || isDev) && (
+                            <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 text-slate-400 hover:text-rose-500" title="Delete">
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                        </div>
                   </div>
                 </div>
