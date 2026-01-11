@@ -7,9 +7,9 @@ import { ChatMessage, Reaction, UserRole } from '../types';
 import { 
   Send, Mic, Image as ImageIcon, Paperclip, X, 
   Smile, Play, Pause, File as FileIcon, Trash2,
-  Plus, ShieldAlert, ShieldCheck, Maximize2,
-  Bell, BellOff, Sparkles, Bot, Bug, Reply,
-  ChevronDown, Copy, MoreVertical, ArrowDown
+  ShieldAlert, Sparkles, Bot, Reply,
+  ArrowDown, Bell, BellOff, MoreVertical, Copy,
+  CornerDownLeft
 } from 'lucide-react';
 
 const EMOJIS = [
@@ -88,21 +88,20 @@ const ChatRoom: React.FC = () => {
   };
 
   useEffect(() => {
-    // Initial scroll
     scrollToBottom(false);
   }, [messages.length === 0]); 
 
   useEffect(() => {
-    // Smart auto-scroll: Only if near bottom or if it's my message
     if (!containerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = containerRef.current;
-    const isNearBottom = scrollHeight - scrollTop - clientHeight < 200;
+    const isNearBottom = scrollHeight - scrollTop - clientHeight < 300;
     const lastMsg = messages[messages.length - 1];
     
+    // Auto-scroll if near bottom or if I sent the message
     if (isNearBottom || (lastMsg && lastMsg.userId === user?.id)) {
       scrollToBottom();
     }
-  }, [messages, isBotTyping, typingUsers]);
+  }, [messages, isBotTyping]);
 
   // --- Real-time Typing ---
   useEffect(() => {
@@ -154,8 +153,10 @@ const ChatRoom: React.FC = () => {
     setInputText(val);
     broadcastTyping();
 
-    // Detect @Mention
-    const lastWord = val.split(/[\s\n]+/).pop();
+    // Detect @Mention at the end of the input (or actively typing one)
+    const words = val.split(/[\s\n]+/);
+    const lastWord = words[words.length - 1];
+    
     if (lastWord && lastWord.startsWith('@')) {
       setMentionQuery(lastWord.substring(1));
       setShowMentionPopup(true);
@@ -172,6 +173,7 @@ const ChatRoom: React.FC = () => {
     setInputText(newValue);
     setShowMentionPopup(false);
     setMentionQuery(null);
+    document.getElementById('chat-input')?.focus();
   };
 
   // --- Message Subscription & Notifications ---
@@ -229,16 +231,16 @@ const ChatRoom: React.FC = () => {
             return next;
         });
 
-        // Notifications
+        // Notifications logic
         if (notificationsEnabled && user && newMsg.user_id !== user.id && document.hidden) {
            const sender = userCache.find(u => u.id === newMsg.user_id);
            const senderName = sender ? sender.name : 'Someone';
+           const isMention = newMsg.content.includes(`@${user.name}`);
            
-           // Check for Mentions
-           if (newMsg.content.includes(`@${user.name}`)) {
-             new Notification(`🔴 You were mentioned by ${senderName}`, { 
+           if (isMention) {
+             new Notification(`🔴 ${senderName} mentioned you!`, { 
                 body: newMsg.content,
-                icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602316.png' 
+                icon: 'https://cdn-icons-png.flaticon.com/512/3602/3602316.png'
              });
            } else {
              new Notification(`New message from ${senderName}`, { body: newMsg.content });
@@ -265,36 +267,34 @@ const ChatRoom: React.FC = () => {
     return u || { name: 'Student', role: 'STUDENT' };
   };
 
-  // --- BOT LOGIC ---
+  // --- BOT LOGIC (Server Side Response) ---
   const handleBotTrigger = async (userQuery: string) => {
+    // Debounce
     const now = Date.now();
     if (now - lastBotTriggerRef.current < 2000) return; 
     lastBotTriggerRef.current = now;
 
+    // Show local typing indicator while bot thinks
     setIsBotTyping(true);
-    const safetyTimeout = setTimeout(() => setIsBotTyping(false), 15000);
+    const safetyTimeout = setTimeout(() => setIsBotTyping(false), 20000);
 
     try {
+      // 1. Ask Gemini
       const responseText = await aiService.askZay(userQuery, user);
+      
       clearTimeout(safetyTimeout);
       setIsBotTyping(false);
 
-      const aiMsg: ChatMessage = {
-          id: `ai-${Date.now()}`,
-          userId: ZAY_ID,
-          content: responseText,
+      // 2. Send Response to DB (Visible to everyone)
+      await supabaseService.sendMessage({ 
+          userId: ZAY_ID, 
+          content: responseText, 
           type: 'text',
-          createdAt: new Date().toISOString(),
-          reactions: []
-      };
-      setMessages(prev => [...prev, aiMsg]);
-      scrollToBottom();
+          createdAt: new Date().toISOString()
+      });
 
-      await supabaseService.sendMessage({ userId: ZAY_ID, content: responseText, type: 'text' });
     } catch (error) {
       console.error("Bot Trigger Error:", error);
-    } finally {
-      clearTimeout(safetyTimeout);
       setIsBotTyping(false);
     }
   };
@@ -307,10 +307,12 @@ const ChatRoom: React.FC = () => {
     setShowMentionPopup(false);
 
     let content = inputText;
-    // Add reply context if exists
+    
+    // Append Reply Context as a quote block
     if (replyingTo) {
       const replyUser = getUserInfo(replyingTo.userId);
-      content = `> Replying to ${replyUser.name}: "${replyingTo.content.substring(0, 30)}..."\n\n${content}`;
+      // Format: > Replying to Name: "Snippet"
+      content = `> Replying to ${replyUser.name}: "${replyingTo.content.substring(0, 40)}${replyingTo.content.length > 40 ? '...' : ''}"\n\n${content}`;
     }
 
     try {
@@ -335,6 +337,7 @@ const ChatRoom: React.FC = () => {
       setAttachment(null);
       setReplyingTo(null);
 
+      // Trigger bot if mentioned
       if (type === 'text' && content.toLowerCase().includes('@zay')) {
         handleBotTrigger(content);
       }
@@ -424,12 +427,13 @@ const ChatRoom: React.FC = () => {
 
   const handleDeleteMessage = async (msgId: string) => {
     if (confirm("Delete this message?")) {
+      // Optimistic delete
       setMessages(prev => prev.filter(m => m.id !== msgId));
       await supabaseService.deleteMessage(msgId);
     }
   };
 
-  // --- FORMATTING HELPERS ---
+  // --- RENDER HELPERS ---
   const formatDateLabel = (dateStr: string) => {
     const date = new Date(dateStr);
     const today = new Date();
@@ -438,29 +442,38 @@ const ChatRoom: React.FC = () => {
 
     if (date.toDateString() === today.toDateString()) return 'Today';
     if (date.toDateString() === yesterday.toDateString()) return 'Yesterday';
-    return date.toLocaleDateString(lang, { weekday: 'short', month: 'short', day: 'numeric' });
+    return date.toLocaleDateString(lang, { weekday: 'long', month: 'short', day: 'numeric' });
+  };
+
+  const parseReply = (content: string) => {
+    const replyRegex = /^> Replying to (.*?): "(.*?)"\n\n(.*)/s;
+    const match = content.match(replyRegex);
+    if (match) {
+      return {
+        isReply: true,
+        replyToName: match[1],
+        replySnippet: match[2],
+        actualContent: match[3]
+      };
+    }
+    return { isReply: false, actualContent: content };
   };
 
   const renderContentWithMentions = (content: string) => {
     const parts = content.split(/(@\w+)/g);
     return parts.map((part, i) => {
       if (part.startsWith('@')) {
-        return <span key={i} className="text-indigo-200 bg-indigo-500/20 px-1 rounded font-black">{part}</span>;
+        return <span key={i} className="text-indigo-600 font-black bg-indigo-50 px-1 rounded-md">{part}</span>;
       }
       return part;
     });
   };
 
-  // --- RENDER ---
-  const typingNames = Array.from(typingUsers.values());
-  let typingText = '';
-  if (typingNames.length === 1) typingText = `${typingNames[0]} is typing...`;
-  else if (typingNames.length === 2) typingText = `${typingNames[0]} and ${typingNames[1]} are typing...`;
-  else if (typingNames.length > 2) typingText = `${typingNames[0]}, ${typingNames[1]} and ${typingNames.length - 2} others...`;
-
   const filteredUsers = mentionQuery !== null 
     ? userCache.filter(u => u.name.toLowerCase().includes(mentionQuery.toLowerCase()) && u.id !== user?.id)
     : [];
+
+  const typingNames = Array.from(typingUsers.values());
 
   return (
     <div className="flex flex-col h-full bg-[#f0f2f5] relative">
@@ -505,15 +518,16 @@ const ChatRoom: React.FC = () => {
           
           // Date Grouping
           const showDate = !prevMsg || new Date(msg.createdAt).toDateString() !== new Date(prevMsg.createdAt).toDateString();
-          
-          // Consecutive Message Logic (for cleaner bubbles)
+          // Sequence Grouping
           const isSequence = prevMsg && prevMsg.userId === msg.userId && !showDate;
           
+          const { isReply, replyToName, replySnippet, actualContent } = parseReply(msg.content);
+
           return (
             <React.Fragment key={msg.id}>
               {showDate && (
                 <div className="flex justify-center my-6">
-                  <span className="bg-slate-200/60 backdrop-blur text-slate-500 text-[10px] font-bold px-4 py-1.5 rounded-full shadow-sm uppercase tracking-wider">
+                  <span className="bg-slate-200/80 backdrop-blur text-slate-600 text-[10px] font-bold px-3 py-1 rounded-full shadow-sm uppercase tracking-wider">
                     {formatDateLabel(msg.createdAt)}
                   </span>
                 </div>
@@ -533,7 +547,7 @@ const ChatRoom: React.FC = () => {
                     </div>
                   )}
                   
-                  <div className={`relative px-4 py-3 text-sm font-medium shadow-sm transition-all
+                  <div className={`relative px-4 py-3 text-sm font-medium shadow-sm transition-all overflow-hidden
                     ${isMe 
                       ? `bg-indigo-600 text-white ${isSequence ? 'rounded-3xl rounded-tr-md' : 'rounded-3xl rounded-tr-sm'}` 
                       : isBot 
@@ -541,9 +555,18 @@ const ChatRoom: React.FC = () => {
                         : `bg-white text-slate-800 ${isSequence ? 'rounded-3xl rounded-tl-md' : 'rounded-3xl rounded-tl-sm'}`
                     }
                   `}>
+                    
+                    {/* Render Reply Block */}
+                    {isReply && (
+                      <div className={`mb-2 pl-2 border-l-2 rounded-r-md py-1 text-xs cursor-pointer opacity-90 hover:opacity-100 bg-black/5 ${isMe ? 'border-indigo-400' : 'border-indigo-500'}`}>
+                         <p className={`text-[9px] font-black uppercase mb-0.5 ${isMe ? 'text-indigo-200' : 'text-indigo-600'}`}>{replyToName}</p>
+                         <p className={`line-clamp-1 italic ${isMe ? 'text-indigo-100' : 'text-slate-500'}`}>{replySnippet}</p>
+                      </div>
+                    )}
+
                     {msg.type === 'text' && (
                       <p className="whitespace-pre-wrap break-words leading-relaxed">
-                        {isMe ? msg.content : renderContentWithMentions(msg.content)}
+                        {renderContentWithMentions(isReply ? actualContent : msg.content)}
                       </p>
                     )}
                     
@@ -555,7 +578,7 @@ const ChatRoom: React.FC = () => {
 
                     {msg.type === 'file' && (
                       <div className="flex items-center gap-3 bg-black/5 p-3 rounded-xl border border-black/5">
-                          <FileIcon size={20}/><a href={msg.mediaUrl || '#'} target="_blank" className="text-xs underline font-black truncate max-w-[150px]">{msg.fileName}</a>
+                          <FileIcon size={20}/><a href={msg.mediaUrl || '#'} target="_blank" className="text-xs underline font-black truncate max-w-[150px] text-current">{msg.fileName}</a>
                       </div>
                     )}
 
@@ -577,13 +600,13 @@ const ChatRoom: React.FC = () => {
                        </span>
                     </div>
 
-                    {/* Quick Actions Hover */}
+                    {/* Quick Reply on Hover */}
                     <button 
-                        onClick={() => setReplyingTo(msg)}
-                        className={`absolute top-1/2 -translate-y-1/2 ${isMe ? '-left-8' : '-right-8'} p-1.5 text-slate-400 hover:text-indigo-600 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all`}
+                        onClick={() => { setReplyingTo(msg); document.getElementById('chat-input')?.focus(); }}
+                        className={`absolute top-1/2 -translate-y-1/2 ${isMe ? '-left-8' : '-right-8'} p-2 text-slate-400 hover:text-indigo-600 bg-white rounded-full shadow-sm opacity-0 group-hover:opacity-100 transition-all z-10 md:flex hidden`}
                         title="Reply"
                     >
-                        <Reply size={14} />
+                        <CornerDownLeft size={14} />
                     </button>
                   </div>
 
@@ -597,10 +620,11 @@ const ChatRoom: React.FC = () => {
                       </div>
                   )}
 
-                  {/* Reaction Picker on Hover */}
+                  {/* Reaction Picker & Reply (Mobile Friendly) */}
                   <div className={`absolute -top-8 ${isMe ? 'right-0' : 'left-0'} opacity-0 group-hover:opacity-100 transition-all z-10 pointer-events-none group-hover:pointer-events-auto`}>
                        <div className="bg-white border shadow-lg rounded-full p-1 flex items-center gap-0.5 scale-90">
                           {['👍', '❤️', '😂', '😮'].map(e => <button key={e} onClick={() => toggleReaction(msg, e)} className="p-1.5 hover:scale-125 transition-transform">{e}</button>)}
+                          <button onClick={() => setReplyingTo(msg)} className="p-1.5 text-slate-400 hover:text-indigo-600"><CornerDownLeft size={14} /></button>
                           {(isMe || isDev) && <button onClick={() => handleDeleteMessage(msg.id)} className="p-1.5 text-slate-400 hover:text-rose-500"><Trash2 size={14} /></button>}
                        </div>
                   </div>
@@ -618,7 +642,9 @@ const ChatRoom: React.FC = () => {
                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                  <div className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></div>
               </div>
-              <span className="text-[10px] font-bold text-slate-400">{typingText}</span>
+              <span className="text-[10px] font-bold text-slate-400">
+                {typingNames.length === 1 ? `${typingNames[0]} is typing...` : `${typingNames.length} people are typing...`}
+              </span>
            </div>
         )}
 
@@ -655,13 +681,13 @@ const ChatRoom: React.FC = () => {
         
         {/* Mention Popup */}
         {showMentionPopup && filteredUsers.length > 0 && (
-          <div className="absolute bottom-full left-4 mb-2 bg-white border border-slate-100 shadow-xl rounded-2xl w-64 max-h-48 overflow-y-auto animate-in slide-in-from-bottom-2 z-50">
-             <div className="p-2 text-[10px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 sticky top-0">Mention Member</div>
+          <div className="absolute bottom-full left-4 mb-2 bg-white border border-slate-100 shadow-2xl rounded-2xl w-64 max-h-48 overflow-y-auto animate-in slide-in-from-bottom-2 z-50">
+             <div className="p-2 text-[9px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 sticky top-0">Members</div>
              {filteredUsers.map(u => (
                <button 
                  key={u.id}
                  onClick={() => insertMention(u.name)}
-                 className="w-full flex items-center gap-3 p-2.5 hover:bg-indigo-50 transition-colors text-left"
+                 className="w-full flex items-center gap-3 p-2.5 hover:bg-indigo-50 transition-colors text-left border-b border-slate-50 last:border-0"
                >
                  <div className="w-6 h-6 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center text-[10px] font-black">
                    {u.name.charAt(0)}
@@ -675,14 +701,17 @@ const ChatRoom: React.FC = () => {
           </div>
         )}
 
-        {/* Reply Context */}
+        {/* Reply Context Banner */}
         {replyingTo && (
-           <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl mb-2 border-l-4 border-indigo-500 animate-in slide-in-from-bottom-2">
+           <div className="flex items-center justify-between bg-slate-50 p-2 rounded-xl mb-2 border-l-4 border-indigo-500 animate-in slide-in-from-bottom-2 shadow-sm">
              <div className="overflow-hidden">
-                <p className="text-[10px] font-black text-indigo-600 uppercase mb-0.5">Replying to {getUserInfo(replyingTo.userId).name}</p>
-                <p className="text-xs text-slate-600 truncate">{replyingTo.content}</p>
+                <div className="flex items-center gap-1.5 mb-0.5">
+                   <Reply size={12} className="text-indigo-600"/>
+                   <span className="text-[10px] font-black text-indigo-600 uppercase">Replying to {getUserInfo(replyingTo.userId).name}</span>
+                </div>
+                <p className="text-xs text-slate-600 truncate pl-4">{replyingTo.content}</p>
              </div>
-             <button onClick={() => setReplyingTo(null)} className="p-1 hover:bg-slate-200 rounded-full"><X size={14}/></button>
+             <button onClick={() => setReplyingTo(null)} className="p-1.5 hover:bg-slate-200 rounded-full text-slate-400 hover:text-slate-600 transition-colors"><X size={14}/></button>
            </div>
         )}
 
@@ -723,9 +752,10 @@ const ChatRoom: React.FC = () => {
                     
                     <div className="flex-1 bg-slate-100 border border-transparent focus-within:bg-white focus-within:border-indigo-200 rounded-[1.5rem] flex items-center px-4 py-2 transition-all">
                         <textarea 
+                            id="chat-input"
                             value={inputText}
                             onChange={handleInputChange}
-                            placeholder={t('chat_placeholder')}
+                            placeholder={replyingTo ? `Reply to ${getUserInfo(replyingTo.userId).name}...` : t('chat_placeholder')}
                             className="w-full bg-transparent outline-none text-sm font-medium resize-none py-1.5 text-slate-800 placeholder:text-slate-400"
                             rows={1}
                             onKeyDown={(e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendMessage(); } }}
